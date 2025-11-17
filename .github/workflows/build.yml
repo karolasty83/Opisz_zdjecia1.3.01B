@@ -2,12 +2,19 @@ name: Build EXE
 
 on:
   workflow_dispatch:
+    inputs:
+      exe_name:
+        description: "Nazwa pliku EXE (bez rozszerzenia)"
+        required: false
+        default: "OpiszZdjecia"
   push:
     branches: [ main ]
 
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      EXE_NAME: ${{ github.event.inputs.exe_name || 'OpiszZdjecia' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,10 +30,10 @@ jobs:
 
       - name: Build one-file exe
         run: |
-          pyinstaller main.pyw --onefile --noconsole --name OpiszZdjecia --add-data "drivers;drivers" --add-data "sounds;sounds" --add-data "help.html;."
+          pyinstaller main.pyw --onefile --noconsole --name "$Env:EXE_NAME" --add-data "drivers;drivers" --add-data "sounds;sounds" --add-data "help.html;."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OpiszZdjecia-exe
-          path: dist/OpiszZdjecia.exe
+          name: ${{ env.EXE_NAME }}-exe
+          path: dist/${{ env.EXE_NAME }}.exe
