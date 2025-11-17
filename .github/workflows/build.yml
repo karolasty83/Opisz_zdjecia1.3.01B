@@ -23,10 +23,10 @@ jobs:
 
       - name: Build one-file exe
         run: |
-          pyinstaller main.pyw --onefile --noconsole --name "Opisz_zdjęcia3.02" --add-data "drivers;drivers" --add-data "sounds;sounds" --add-data "help.html;."
+          pyinstaller main.pyw --onefile --noconsole --name OpiszZdjecia --add-data "drivers;drivers" --add-data "sounds;sounds" --add-data "help.html;."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Opisz_zdjecia3.02-exe
-          path: dist/Opisz_zdjęcia3.02.exe
+          name: OpiszZdjecia-exe
+          path: dist/OpiszZdjecia.exe
