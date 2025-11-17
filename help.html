@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Podręcznik użytkownika — Opisz zdjęcia 1.0</title>
+    <meta name="description" content="Instrukcja obsługi programu do tworzenia opisów zdjęć: przeglądarka, edycja, tryby, opisywanie zbiorcze, prompty i ustawienia." />
+    <style>
+      :root {
+        --bg:#ffffff; --fg:#111827; --muted:#6b7280;
+        --btn-bg:#f3f4f6; --btn-fg:#111827; --btn-br:#d1d5db; --btn-bg-active:#e5e7eb;
+        --accent:#2563eb; --ring:#93c5fd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg:#0b0f16; --fg:#e5e7eb; --muted:#9ca3af;
+          --btn-bg:#121826; --btn-fg:#e5e7eb; --btn-br:#1f2937; --btn-bg-active:#172033;
+          --accent:#60a5fa; --ring:#1d4ed8;
+        }
+      }
+
+      html, body { height: 100%; }
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; line-height: 1.55; margin: 24px; color: var(--fg); background: var(--bg); }
+      h1, h2, h3 { line-height: 1.25; }
+      h1 { margin: 0 0 12px; }
+      p { margin: 0 0 12px; }
+      code, kbd { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+      @media (prefers-color-scheme: dark) {
+        code, kbd { background: #0f172a; }
+      }
+      kbd { border: 1px solid #ccc; box-shadow: inset 0 -1px 0 #ccc; font-size: .95em; }
+      .lead { color: var(--muted); margin-bottom: 18px; }
+      .note { background: #fff8cc; border: 1px solid #f2e59c; padding: 10px 12px; border-radius: 6px; margin: 8px 0 16px; color: #4b5563; }
+      @media (prefers-color-scheme: dark) {
+        .note { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+      }
+
+      /* Accordion */
+      .acc { max-width: 920px; }
+      .toggle-btn { text-align: left; padding: 10px 12px; border: 1px solid var(--btn-br); border-radius: 10px; background: var(--btn-bg); color: var(--btn-fg); font-weight: 600; cursor: pointer; }
+      .toggle-btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+      .acc.linear .acc-btn { display: none; }
+
+      .acc-btn { width: 100%; text-align: left; padding: 12px 14px; margin: 10px 0 0; border: 1px solid var(--btn-br); border-radius: 10px; background: var(--btn-bg); color: var(--btn-fg); font-weight: 600; cursor: pointer; display: block; }
+      .acc-btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+      .acc-btn[aria-expanded="true"] { background: var(--btn-bg-active); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+      .acc-panel { border: 1px solid var(--btn-br); border-top: none; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; padding: 12px 14px; }
+      .acc-panel[hidden] { display: none; }
+      .acc-panel > :first-child { margin-top: 0; }
+      .acc-panel ul { margin: 8px 0 8px 20px; }
+      .acc-panel li { margin: 4px 0; }
+
+      /* H2 widoczny tylko w trybie „tekst pełny” (sekcje wyłączone) */
+      .linear-h2 { display: none; margin: 20px 0 8px; font-size: 1.25rem; }
+      .acc.linear .linear-h2 { display: block; }
+
+      /* High-contrast link focus */
+      a:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+
+      /* Reduce motion */
+      @media (prefers-reduced-motion: reduce) {
+        * { scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="top">Podręcznik użytkownika — Opisz zdjęcia 1.0</h1>
+
+    <p class="lead">Zacznę od tego, że tworzenie tej aplikacji odbywało się we współpracy z <strong>pewnym chatem</strong> oraz z <strong>Basią i Krzysztofem</strong>. Oni podrzucali coraz to nowsze pomysły, a my głowiliśmy się, jak to posklejać i puścić w ruch — niech działa! Basiu, Krzysztofie, stokrotne dzięki za <strong>nieustanne podnoszenie poprzeczki i wspólne zmagania nad pomysłami, co by tu jeszcze…</strong></p>
+
+    <div class="note" id="view-note">
+      <p>Dostępne są dwa sposoby czytania podręcznika: w sekcjach lub jako tekst pełny.</p>
+    </div>
+
+    <p><strong>Poniższy przycisk przełącza między sekcjami a pełnym tekstem.</strong></p>
+    <p>
+      <button id="acc-mode-toggle" class="toggle-btn" aria-pressed="true" type="button">sekcje: włączone</button>
+    </p>
+
+    <div class="acc" id="acc">
+      <!-- Przyciski sterują panele przez aria-controls. Panele nie mają nazwanego regionu, nagłówki H2 są jedynym źródłem nazwy. -->
+
+      <button class="acc-btn" id="btn-p-start" aria-expanded="false" aria-controls="p-start" type="button">Początek pracy z programem</button>
+      <div class="acc-panel" id="p-start" hidden>
+        <h2 class="linear-h2" id="h-p-start">Początek pracy z programem</h2>
+        <p>Najlepiej utwórz osobny folder, w którym umieścisz plik wykonywalny programu. Po pierwszym uruchomieniu aplikacja automatycznie utworzy dwa pliki konfiguracyjne w formacie JSON w tym folderze.</p>
+        <p>Na początku wskaż folder roboczy z plikami graficznymi. Program będzie z niego pobierał zdjęcia do przeglądania i opisywania oraz w nim zapisywał ewentualne raporty z sesji. <em>(Szczegóły konfiguracji znajdują się w rozdziale „Ustawienia”.)</em></p>
+        <p>Następnie dodaj co najmniej jeden klucz API, aby możliwe było generowanie opisów. Na koniec utwórz i wybierz prompt, czyli styl i instrukcję, według której będą tworzone opisy. Treść przykładowych promptów znajduje się w rozdziale „Edytor promptów”.</p>
+        <p>Po przygotowaniu środowiska możesz skorzystać z przeglądarki zdjęć, pracować nad pojedynczymi zdjęciami, albo uruchomić opisywanie zbiorcze, by automatycznie uzupełnić opisy dla wielu zdjęć.</p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-startwin" aria-expanded="false" aria-controls="p-startwin" type="button">Okno główne</button>
+      <div class="acc-panel" id="p-startwin" hidden>
+        <h2 class="linear-h2" id="h-p-startwin">Okno główne</h2>
+        <p><strong>Z okna głównego przejdziesz do najważniejszych funkcji programu.</strong> Każdy przycisk uruchamia odpowiedni tryb pracy lub narzędzie pomocnicze. Możesz korzystać ze skrótów klawiszowych.</p>
+        <ul>
+          <li><strong>Przeglądarka zdjęć</strong> (<kbd>Ctrl+P</kbd>) otwiera listę plików i pozwala pracować nad nimi indywidualnie.</li>
+          <li><strong>Opisywanie zbiorcze</strong> (<kbd>Ctrl+O</kbd>) uruchamia proces automatycznego tworzenia opisów dla wielu zdjęć.</li>
+          <li><strong>Opisz zdjęcie z kamery</strong> (<kbd>Ctrl+Shift+C</kbd>) wykonuje zdjęcie kamerą (np. wbudowaną) i od razu opisuje wynik.</li>
+          <li><strong>Licznik opisanych zdjęć</strong> (<kbd>Ctrl+L</kbd>) pokazuje sumę zapisanych opisów i umożliwia jej wyzerowanie.</li>
+          <li><strong>Ustawienia</strong> (<kbd>Ctrl+U</kbd>) prowadzą do konfiguracji folderu roboczego, kluczy Api. Można tam także ustalić, czy opisy zdjęć trafią do plików tekstowych.</li>
+          <li><strong>Edytor promptów</strong> (<kbd>Ctrl+E</kbd>) możesz otworzyć bezpośrednio z okna głównego (nie tylko z Ustawień).</li>
+          <li><strong>Pomoc</strong> (<kbd>F1</kbd>) otwiera dokumentację programu.</li>
+        </ul>
+      </div>
+
+      <button class="acc-btn" id="btn-p-viewer" aria-expanded="false" aria-controls="p-viewer" type="button">Przeglądarka zdjęć</button>
+      <div class="acc-panel" id="p-viewer" hidden>
+        <h2 class="linear-h2" id="h-p-viewer">Przeglądarka zdjęć</h2>
+        <p>Przeglądarka prezentuje listę zdjęć w folderze roboczym. Dla każdego pliku widoczna jest nazwa oraz status, który informuje, czy zdjęcie ma już zapisany opis.</p>
+        <p>Nawigacja po liście odbywa się przy pomocy klawiszy <strong>strzałka w górę</strong>, <strong>strzałka w dół</strong>. Po operacjach takich jak edycja opisu, usunięcie opisu czy zmiana nazwy program utrzymuje aktualną pozycję na liście. Dostępne są skróty klawiszowe oraz menu kontekstowe.</p>
+        <p>Wyszukiwarka opisów (<kbd>Ctrl+F</kbd>) ułatwia odnalezienie zdjęcia po fragmencie tekstu. Wpisz szukaną frazę, po czym naciśnij Enter lub przycisk OK, aby przejść na listę wyników. Strzałkami wybierasz pozycję, a Enter otwiera opis w trybie tylko do odczytu. Klawisz <kbd>Esc</kbd> zamyka wyszukiwarkę i wraca do listy zdjęć.</p>
+        <ul>
+          <li>Edytuj lub dodaj opis (jeśli brak): <kbd>F2</kbd>.</li>
+          <li>Odczytaj opis zdjęcia i zadawaj pytania modelowi: <kbd>Enter</kbd> (okno zawiera sekcję „Wpisz pytanie” oraz historię odpowiedzi w polu tylko do odczytu).</li>
+          <li>Zmień nazwę pliku: <kbd>Shift+F2</kbd>.</li>
+          <li>Usuń opis z pliku: <kbd>Delete</kbd>.</li>
+          <li>Uruchom opis pojedynczego zdjęcia lub kilku zaznaczonych: <kbd>F3</kbd>.</li>
+          <li>Przełącz filtr: <kbd>F4</kbd> (mieszany, z opisem, bez opisu).</li>
+          <li>Wyświetl zdjęcie w przeglądarce systemowej: <kbd>F11</kbd>.</li>
+          <li>Wyszukaj w opisach: <kbd>Ctrl+F</kbd>.</li>
+          <li>Kopiuj opis do schowka: <kbd>Ctrl+C</kbd>.</li>
+          <li>Wróć do okna głównego: <kbd>Esc</kbd>.</li>
+        </ul>
+        <p>Po otwarciu opisu możesz wpisać swoje pytanie w polu „Wpisz pytanie” i nacisnąć Enter, aby poprosić model o dodatkowe informacje dotyczące bieżącego zdjęcia. Odpowiedzi modelu trafiają do pola tylko do odczytu, w którym prezentowana jest cała historia rozmowy.</p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-edit" aria-expanded="false" aria-controls="p-edit" type="button">Edycja opisu i nazwy</button>
+      <div class="acc-panel" id="p-edit" hidden>
+        <h2 class="linear-h2" id="h-p-edit">Edycja opisu i nazwy</h2>
+        <p>Edycja opisu pozwala szybko utworzyć lub dopracować treść zapisaną w metadanych zdjęcia. Po wybraniu polecenia otwiera się okno z wielowierszowym polem tekstowym. Zatwierdzasz zmiany przyciskiem OK. Anulowanie modyfikacji jest możliwe klawiszem Esc. W tym trybie klawisz Enter wstawia nową linię w polu edycji.</p>
+        <p>Zmiana nazwy pliku otwiera okno z polem tekstowym. Po wpisaniu nowej nazwy naciśnij Enter, aby zatwierdzić, lub Esc, aby zrezygnować. </p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-filter" aria-expanded="false" aria-controls="p-filter" type="button">Filtrowanie listy w przeglądarce</button>
+      <div class="acc-panel" id="p-filter" hidden>
+        <h2 class="linear-h2" id="h-p-filter">Filtrowanie listy w przeglądarce</h2>
+        <p>Filtrowanie pozwala zawęzić listę do wybranej kategorii plików. Dostępne są trzy tryby:</p>
+        <ul>
+          <li><strong>Mieszany</strong> — wszystkie zdjęcia w folderze roboczym (to ustawienie jest aktywne po uruchomieniu przeglądarki).</li>
+          <li><strong>Z opisem</strong> — tylko pliki, w których zapisano opis.</li>
+          <li><strong>Bez opisu</strong> — tylko pliki, którym opisu brakuje.</li>
+        </ul>
+        <p>Aby sprawdzić, który filtr jest w danej chwili włączony, należy odczytać tytuł okna za pomocą programu odczytu ekranu. Początkowo tytuł ma formę standardową, a dopiero po zmianie filtra przyjmuje nazwę wybranego trybu.</p>
+        <p>Przełączanie filtrów odbywa się klawiszem <kbd>F4</kbd>. Po zapisaniu lub usunięciu opisu plik może zmienić przynależność do trybu — program przenosi wtedy fokus na najbliższy sąsiedni element, aby zachować płynność pracy.</p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-batch" aria-expanded="false" aria-controls="p-batch" type="button">Opisywanie zbiorcze</button>
+      <div class="acc-panel" id="p-batch" hidden>
+        <h2 class="linear-h2" id="h-p-batch">Opisywanie zbiorcze</h2>
+        <p>Opisywanie zbiorcze automatycznie przetwarza wiele zdjęć. Najpierw wybierasz prompt, a następnie program generuje opisy i zapisuje je do metadanych plików. W czasie pracy w oknie postępu widoczny jest log informujący o wyniku dla każdego pliku.</p>
+        <p>Przed uruchomieniem procesu program zlicza pliki i informuje, ile zdjęć ma już opis, a ile jest bez opisu. Wyświetlany jest czytelny komunikat w stylu: Wykryto 19 plików. 1 z nich zawiera już opis, czy chcesz uzupełnić brakujące opisy?</p>
+        <p>Po zakończeniu sesji wyświetlane jest podsumowanie. Gdy wszystkie pliki uda się opisać, zobaczysz krótką informację o liczbie i czasie. Gdy wystąpią błędy, otworzy się okno z informacją o problemach.</p>
+        <p>Jeśli w Ustawieniach włączono raport TXT, program zapisze zbiorczą listę nazw plików i ich opisów w folderze roboczym.</p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-prompts" aria-expanded="false" aria-controls="p-prompts" type="button">Edytor promptów</button>
+      <div class="acc-panel" id="p-prompts" hidden>
+        <h2 class="linear-h2" id="h-p-prompts">Edytor promptów</h2>
+        <p>Edytor promptów pozwala tworzyć i modyfikować instrukcje, według których generowane są opisy. Każdy prompt ma nazwę (do identyfikacji na liście) i treść (faktyczna instrukcja dla modelu). Możesz też oznaczyć prompt jako domyślny, aby był podpowiadany podczas rozpoczynania nowej sesji opisu.</p>
+        <p>Warto utrzymywać jasne, zwięzłe i konkretne treści promptów, które odpowiadają Twoim wymaganiom. Dzięki temu uzyskasz spójne opisy i łatwiej będzie porównać wyniki.</p>
+        <p>Stojąc na liście promptów możesz szybko dodać nowy prompt skrótem <kbd>Ctrl+N</kbd>.</p>
+        <h3>Przykładowe prompty</h3>
+        <ul>
+          <li><strong>Nazwa:</strong> szczegółowy<br>
+              <strong>Treść:</strong> Opisz to zdjęcie po polsku bardzo dokładnie, zwracając uwagę na osoby, ich wygląd, ubiór, gesty i czynności, a także na tło, światło i przedmioty. Nie używaj zwrotów: „na zdjęciu widać”, „widzimy”.
+          </li>
+          <li><strong>Nazwa:</strong> krótki opis<br>
+              <strong>Treść:</strong> Opisz zdjęcie jednym zdaniem.
+          </li>
+        </ul>
+        <p>Pisanie promptów to eksperymentowanie. Dlatego warto, aby każdy stworzył coś dla siebie. Powyższe są jedynie przykładami. Użytkownik ma dużą swobodę — od zmiany języka, przez opisy techniczne, śmieszne, poetyckie — co tam komu w duszy gra.</p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-settings" aria-expanded="false" aria-controls="p-settings" type="button">Ustawienia</button>
+      <div class="acc-panel" id="p-settings" hidden>
+        <h2 class="linear-h2" id="h-p-settings">Ustawienia</h2>
+        <p>W Ustawieniach wskazujesz folder roboczy, w którym znajdują się zdjęcia do opisania oraz raporty tekstowe, dodajesz  co najmniej jeden klucz API. Jeśli skonfigurujesz klucze dla dwóch dostawców (OpenAI i Gemini), wybierasz, który mechanizm opisu zdjęć ma być używany.</p>
+        <p><strong>Klucz do OpenAI</strong> można pozyskać na <a href="https://platform.openai.com/" target="_blank" rel="noopener">platform.openai.com</a>, a klucz do <strong>Gemini</strong> na <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a>.</p>
+        <p>W podręczniku podane są jedynie adresy stron, ponieważ procedura uzyskania klucza API zależy od dostawcy i może się zmieniać. Na tych stronach znajdują się także informacje o cenniku oraz o ewentualnych dostępnych bezpłatnych planach dla Gemini.</p>
+        <p>Program korzysta z dwóch plików konfiguracyjnych w formacie JSON:</p>
+        <ul>
+          <li><code>config.json</code> — przechowuje ustawienia programu,</li>
+          <li><code>prompts.json</code> — przechowuje prompty (style opisu).</li>
+        </ul>
+        <p class="note"><strong>Uwaga:</strong> jeśli przypadkowo usuniesz któryś z plików konfiguracyjnych, utracisz — w zależności od tego, który plik zniknie — prompty lub ustawienia programu. W takiej sytuacji program, podobnie jak przy pierwszym uruchomieniu, automatycznie utworzy brakujące pliki, ale będą one puste. Zalecam wykonanie kopii zapasowej, zwłaszcza pliku z promptami (<code>prompts.json</code>).</p>
+        <p><strong>Raport TXT:</strong> możesz wybrać 1 z dwóch sposobów zapisu, zaznaczając opcję „Generuj plik TXT z opisem zdjęć (w folderze roboczym)”</p>
+        <ul>
+          <li><em>Jeden plik na sesję</em> — plik TXT ma z góry ustalony format nazwy i jest tworzony dla każdej sesji osobno.</li>
+          <li><em>nadpisywany plik txt</em> — w Ustawieniach podaj nazwę pliku bez rozszerzenia; raporty będą dopisywane do wskazanego pliku.</li>
+        </ul>
+      </div>
+
+      <button class="acc-btn" id="btn-p-shortcuts" aria-expanded="false" aria-controls="p-shortcuts" type="button">Skróty klawiszowe</button>
+      <div class="acc-panel" id="p-shortcuts" hidden>
+        <h2 class="linear-h2" id="h-p-shortcuts">Skróty klawiszowe</h2>
+        <h3>Okno główne</h3>
+        <ul>
+          <li><kbd>Ctrl+P</kbd> — Przeglądarka zdjęć</li>
+          <li><kbd>Ctrl+O</kbd> — Opisywanie zbiorcze</li>
+          <li><kbd>Ctrl+Shift+C</kbd> — Opisz zdjęcie z kamery</li>
+          <li><kbd>Ctrl+L</kbd> — Licznik opisanych zdjęć</li>
+          <li><kbd>Ctrl+U</kbd> — Ustawienia</li>
+          <li><kbd>Ctrl+E</kbd> — Edytor promptów</li>
+          <li><kbd>F1</kbd> — Pomoc</li>
+          <li><kbd>Ctrl+K</kbd> — Zamknij aplikację</li>
+        </ul>
+        <h3>Przeglądarka zdjęć</h3>
+                <ul>
+          <li><kbd>F2</kbd> - Edytuj lub dodaj opis (jeśli brak)</li>
+          <li><kbd>Enter</kbd> - Odczytaj opis zdjęcia</li>
+          <li><kbd>Shift+F2</kbd> — Zmień nazwę pliku</li>
+          <li><kbd>Delete</kbd> — Usuń opis</li>
+          <li><kbd>F3</kbd> — Opisz pojedyncze zdjęcie lub kilka zaznaczonych</li>
+          <li><kbd>F4</kbd> — Przełącz filtr</li>
+          <li><kbd>F11</kbd> — Otwórz w przeglądarce systemowej</li>
+          <li><kbd>Ctrl+F</kbd> — Wyszukiwarka opisów</li>
+          <li><kbd>Ctrl+C</kbd> — Kopiuj opis</li>
+          <li><kbd>Esc</kbd> — Wstecz</li>
+        </ul>
+        <h3>Edytor promptów</h3>
+        <ul>
+          <li><kbd>Ctrl+N</kbd> — Dodaj prompt</li>
+        </ul>
+      </div>
+
+      <button class="acc-btn" id="btn-p-formats" aria-expanded="false" aria-controls="p-formats" type="button">Obsługiwane formaty i zapisy</button>
+      <div class="acc-panel" id="p-formats" hidden>
+        <h2 class="linear-h2" id="h-p-formats">Obsługiwane formaty i zapisy</h2>
+        <p>Program obsługuje formaty obrazów: JPg oraz PNG. Opisy są zapisywane w metadanych pliku, tak aby można je przenosić między aplikacjami.</p>
+      </div>
+
+      <button class="acc-btn" id="btn-p-errors" aria-expanded="false" aria-controls="p-errors" type="button">Błędy i rozwiązywanie problemów</button>
+      <div class="acc-panel" id="p-errors" hidden>
+        <h2 class="linear-h2" id="h-p-errors">Błędy i rozwiązywanie problemów</h2>
+        <p>Jeśli nie dodasz klucza API, program poinformuje o konieczności uzupełnienia ustawień przed rozpoczęciem opisu. Opisywanie zdjęć będzie możliwe wyłącznie z poziomu edycji (<kbd>F2</kbd>) dla wybranych plików, czyli metodą ręcznego wprowadzania tekstu. Gdy podczas pracy dostawca API zwróci błąd, informacja trafi do logu okna postępu, a w podsumowaniu sesji pojawi się czytelna lista z opisem problemów dla konkretnych plików.</p>
+        <p>W sytuacji braku plików w folderze roboczym program wyświetli komunikat z podpowiedzią oraz listą wspieranych rozszerzeń.</p>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        const accEl = document.getElementById('acc');
+        const buttons = Array.from(accEl.querySelectorAll('.acc-btn'));
+        const panels = buttons.map(b => document.getElementById(b.getAttribute('aria-controls')));
+        const toggle = document.getElementById('acc-mode-toggle');
+        const STORAGE_KEYS = { mode: 'acc_mode', open: 'acc_open_id' };
+
+        // Helpers
+        function closeAll(exceptIdx = -1) {
+          buttons.forEach((b, i) => { if (i !== exceptIdx) { b.setAttribute('aria-expanded', 'false'); panels[i].hidden = true; } });
+        }
+        function setMode(enabled) {
+          if (enabled) {
+            accEl.classList.remove('linear');
+            buttons.forEach((b, i) => { b.setAttribute('aria-expanded', 'false'); panels[i].hidden = true; });
+            toggle.setAttribute('aria-pressed', 'true');
+            toggle.textContent = 'sekcje: włączone';
+          } else {
+            accEl.classList.add('linear');
+            buttons.forEach((b, i) => { b.setAttribute('aria-expanded', 'true'); panels[i].hidden = false; });
+            toggle.setAttribute('aria-pressed', 'false');
+            toggle.textContent = 'sekcje: wyłączone';
+          }
+          try { localStorage.setItem(STORAGE_KEYS.mode, String(enabled)); } catch {}
+        }
+        function openById(panelId) {
+          const idx = panels.findIndex(p => p.id === panelId);
+          if (idx >= 0) {
+            closeAll(idx);
+            buttons[idx].setAttribute('aria-expanded', 'true');
+            panels[idx].hidden = false;
+            try { localStorage.setItem(STORAGE_KEYS.open, panelId); } catch {}
+          }
+        }
+
+        // Keyboard navigation per WAI-ARIA Accordion pattern
+        function handleHeaderKeydown(e, idx) {
+          const key = e.key;
+          if (key === 'ArrowDown') { e.preventDefault(); (buttons[idx + 1] || buttons[0]).focus(); }
+          else if (key === 'ArrowUp') { e.preventDefault(); (buttons[idx - 1] || buttons[buttons.length - 1]).focus(); }
+          else if (key === 'Home') { e.preventDefault(); buttons[0].focus(); }
+          else if (key === 'End') { e.preventDefault(); buttons[buttons.length - 1].focus(); }
+          else if (key === 'Enter' || key === ' ') { e.preventDefault(); buttons[idx].click(); }
+        }
+
+        // Events
+        if (toggle) {
+          toggle.addEventListener('click', () => setMode(toggle.getAttribute('aria-pressed') !== 'true'));
+          toggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle.click(); } });
+        }
+
+        buttons.forEach((btn, idx) => {
+          btn.addEventListener('click', () => {
+            const isOpen = btn.getAttribute('aria-expanded') === 'true';
+            if (isOpen) { btn.setAttribute('aria-expanded', 'false'); panels[idx].hidden = true; }
+            else { closeAll(idx); btn.setAttribute('aria-expanded', 'true'); panels[idx].hidden = false; }
+            // Aktualizuj hash dla bezpośrednich linków i zapamiętaj ostatnio otwarty panel
+            if (btn.getAttribute('aria-expanded') === 'true') {
+              history.replaceState(null, '', '#' + panels[idx].id);
+              try { localStorage.setItem(STORAGE_KEYS.open, panels[idx].id); } catch {}
+            }
+          });
+          btn.addEventListener('keydown', (e) => handleHeaderKeydown(e, idx));
+        });
+
+        // Init state from storage or hash
+        const storedMode = (localStorage.getItem(STORAGE_KEYS.mode) || 'true') === 'true';
+        setMode(storedMode);
+
+        const hashId = location.hash.replace('#','');
+        if (hashId) { openById(hashId); }
+        else {
+          const lastOpen = localStorage.getItem(STORAGE_KEYS.open);
+          if (lastOpen && storedMode) { openById(lastOpen); }
+        }
+
+        // Po uruchomieniu: ustaw fokus na nagłówku h1 (góra), jeśli nic innego nie ma fokusu
+        const h1El = document.querySelector('h1');
+        if (h1El) {
+          h1El.setAttribute('tabindex','-1');
+          const ae = document.activeElement;
+          if (!ae || ae === document.body || ae === document.documentElement) {
+            try { h1El.focus(); } catch {}
+          }
+        }
+
+        // Obsługa linków typu <a href="#p-start">…</a>
+        window.addEventListener('hashchange', () => {
+          if (accEl.classList.contains('linear')) return; // w trybie pełnego tekstu wszystko jest otwarte
+          const targetId = location.hash.replace('#','');
+          if (targetId) openById(targetId);
+        });
+      })();
+    </script>
+  </body>
+</html>
