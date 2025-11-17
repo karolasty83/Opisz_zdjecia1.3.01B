@@ -3447,7 +3447,7 @@ class StartFrame(wx.Frame):
 
         outer.Add(self._make_wide_button(panel, "Przeglądarka zdjęć ctrl+p", self.on_browse), 0, wx.EXPAND | wx.ALL, 6)
         outer.Add(self._make_wide_button(panel, "Opisywanie zbiorcze ctrl+o", self.on_describe), 0, wx.EXPAND | wx.ALL, 6)
-        outer.Add(self._make_wide_button(panel, "Opisz zdjęcie z kamerki ctrl+shift+c", self.on_describe_camera), 0, wx.EXPAND | wx.ALL, 6)
+        outer.Add(self._make_wide_button(panel, "Opisz zdjęcie z kamery ctrl+shift+c", self.on_describe_camera), 0, wx.EXPAND | wx.ALL, 6)
 
         row = wx.BoxSizer(wx.HORIZONTAL)
         self.counter_btn = wx.Button(panel, label="Licznik opisanych zdjęć ctrl+l")
