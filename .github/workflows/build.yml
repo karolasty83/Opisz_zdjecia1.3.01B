@@ -28,5 +28,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Opisz_zdjęcia3.02-exe
+          name: Opisz_zdjecia3.02-exe
           path: dist/Opisz_zdjęcia3.02.exe
