@@ -1,0 +1,35 @@
+name: Build EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller wxpython pillow requests piexif pillow-heif opencv-python
+
+      - name: Build one-file exe
+        run: |
+          pyinstaller main.pyw --onefile --noconsole --name OpiszZdjecia ^
+            --add-data "drivers;drivers" ^
+            --add-data "sounds;sounds" ^
+            --add-data "help.html;."
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpiszZdjecia-exe
+          path: dist/OpiszZdjecia.exe
