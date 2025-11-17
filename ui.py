@@ -79,6 +79,79 @@ def _resolve_sound_path(filename: str):
     return None
 
 
+_ANSWER_SOUND_CACHE = {"sound": None, "path": None}
+
+
+def _load_answer_sound_shared():
+    if _ANSWER_SOUND_CACHE["sound"] or _ANSWER_SOUND_CACHE["path"]:
+        return _ANSWER_SOUND_CACHE["sound"], _ANSWER_SOUND_CACHE["path"]
+    path = _resolve_sound_path("kartka.wav")
+    if not path or not os.path.exists(path):
+        return None, None
+    try:
+        sound = wx.Sound(path)
+        if sound.IsOk():
+            _ANSWER_SOUND_CACHE["sound"] = sound
+            _ANSWER_SOUND_CACHE["path"] = path
+            return sound, path
+    except Exception:
+        pass
+    _ANSWER_SOUND_CACHE["path"] = path
+    return None, path
+
+
+def _play_answer_sound_shared(enabled: bool):
+    if not enabled:
+        return
+    sound, path = _load_answer_sound_shared()
+    if not (sound or path):
+        return
+    try:
+        if sound and sound.IsOk() and sound.Play(wx.SOUND_ASYNC):
+            return
+        if winsound and path:
+            try:
+                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                return
+            except Exception:
+                pass
+        wx.Bell()
+    except Exception:
+        wx.Bell()
+
+
+def _strip_stars(messages: list[dict] | None, base_text: str | None = None):
+    """
+    Usuwa znak '*' z ostatniej odpowiedzi asystenta; jeśli brak, opcjonalnie z tekstu bazowego.
+    Zwraca krotkę (changed, target, cleaned_value, updated_messages).
+    target: "message" gdy zmieniono wiadomość, "base" gdy zmieniono tekst bazowy, None gdy brak zmian.
+    """
+    msgs = list(messages or [])
+    last_idx = None
+    last_text = None
+    for idx in range(len(msgs) - 1, -1, -1):
+        entry = msgs[idx] or {}
+        if (entry.get("role") or "").lower() == "assistant":
+            text = entry.get("text") or ""
+            if text.strip():
+                last_idx = idx
+                last_text = text
+                break
+    if last_text is not None:
+        cleaned = last_text.replace("*", "")
+        if cleaned != last_text:
+            msgs[last_idx]["text"] = cleaned
+            return True, "message", cleaned, msgs
+        return False, None, None, msgs
+
+    if base_text is not None:
+        cleaned = base_text.replace("*", "")
+        if cleaned != base_text:
+            return True, "base", cleaned, msgs
+
+    return False, None, None, msgs
+
+
 def ask_yes_no(parent, message: str, title: str, icon=wx.ICON_QUESTION) -> int:
     """Dialog Tak/Nie z domyślnym 'Nie' oraz Esc => 'Nie'."""
     dlg = wx.Dialog(parent, title=title, style=wx.DEFAULT_DIALOG_STYLE | wx.STAY_ON_TOP)
@@ -415,7 +488,7 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
         self._ask_btn = None
         self._pending_question = None
         self._answer_sound_enabled = get_followup_play_sound_from_config()
-        self._answer_sound = None  # używane teraz przy wysyłce
+        self._answer_sound = None  # pozostawione dla zgodności; buforowanie odbywa się globalnie
         self._answer_sound_path = None
 
         if self._followup_enabled:
@@ -629,38 +702,26 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
             self._question_input.SetValue("")
         state = self._followup_state or {}
         messages = list((state.get("messages") or []))
-        # spróbuj z ostatnią odpowiedzią modelu
-        last_idx = None
-        last_text = None
-        for idx in range(len(messages) - 1, -1, -1):
-            entry = messages[idx] or {}
-            if (entry.get("role") or "").lower() == "assistant":
-                text = entry.get("text") or ""
-                if text.strip():
-                    last_idx = idx
-                    last_text = text
-                    break
-        if last_text is not None:
-            cleaned = last_text.replace("*", "")
-            if cleaned == last_text:
-                wx.MessageBox("Nie znaleziono znaku *.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
-                return
-            messages[last_idx]["text"] = cleaned
+        base_desc = state.get("base_description") or self.txt.GetValue() or ""
+        changed, target, cleaned, messages = _strip_stars(messages, base_desc)
+        if not changed:
+            wx.MessageBox("Nie znaleziono znaku *.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
+            return
+        if target == "message":
             state["messages"] = messages
             self._followup_state = state
             self._refresh_answer_field()
+            if cleaned:
+                try:
+                    _nvda_speech.speak(cleaned)
+                except Exception:
+                    pass
             return
 
-        # brak odpowiedzi modelu – pracuj na bazowym opisie
-        base_desc = state.get("base_description") or self.txt.GetValue() or ""
-        cleaned = base_desc.replace("*", "")
-        if cleaned == base_desc:
-            wx.MessageBox("Nie znaleziono znaku *.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
-            return
         state["base_description"] = cleaned
         self._followup_state = state
         try:
-            self.txt.SetValue(cleaned)
+            self.txt.SetValue(cleaned or "")
             self.txt.SetInsertionPoint(0)
         except Exception:
             pass
@@ -672,6 +733,11 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
             try:
                 self._viewer.results[self._image_path] = cleaned
                 self._viewer.populate_list()
+            except Exception:
+                pass
+        if cleaned:
+            try:
+                _nvda_speech.speak(cleaned)
             except Exception:
                 pass
 
@@ -794,40 +860,10 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
         target.SetFocus()
 
     def _load_answer_sound(self):
-        if self._answer_sound or self._answer_sound_path:
-            return self._answer_sound, self._answer_sound_path
-        path = _resolve_sound_path("kartka.wav")
-        if not os.path.exists(path):
-            return None, None
-        try:
-            sound = wx.Sound(path)
-            if sound.IsOk():
-                self._answer_sound = sound
-                self._answer_sound_path = path
-                return sound, path
-        except Exception:
-            pass
-        self._answer_sound_path = path
-        return None, path
+        return _load_answer_sound_shared()
 
     def _play_answer_sound(self):
-        if not self._answer_sound_enabled:
-            return
-        sound, path = self._load_answer_sound()
-        if not (sound or path):
-            return
-        try:
-            if sound and sound.IsOk() and sound.Play(wx.SOUND_ASYNC):
-                return
-            if winsound and path:
-                try:
-                    winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                    return
-                except Exception:
-                    pass
-            wx.Bell()
-        except Exception:
-            wx.Bell()
+        _play_answer_sound_shared(self._answer_sound_enabled)
 
 
 class CompareDialog(wx.Dialog):
@@ -847,6 +883,7 @@ class CompareDialog(wx.Dialog):
         self._busy = False
         self._history = []
         self._pending_question = None
+        self._answer_sound_enabled = get_followup_play_sound_from_config()
 
         panel = wx.Panel(self)
         vbox = wx.BoxSizer(wx.VERTICAL)
@@ -891,9 +928,30 @@ class CompareDialog(wx.Dialog):
         q = (self.question_input.GetValue() or "").strip()
         if not q:
             return
+        if q.strip() == "/*":
+            self.question_input.SetValue("")
+            changed, target, cleaned, messages = _strip_stars(self._history)
+            if not changed:
+                wx.MessageBox("Nie znaleziono znaku *.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
+                return
+            if target == "message":
+                self._history = messages
+            self._refresh_answers()
+            if cleaned:
+                try:
+                    _nvda_speech.speak(cleaned)
+                except Exception:
+                    pass
+            try:
+                self.question_input.SetFocus()
+                self.question_input.SetInsertionPointEnd()
+            except Exception:
+                pass
+            return
         self._busy = True
         self._pending_question = q
         self.question_input.SetValue("")
+        _play_answer_sound_shared(self._answer_sound_enabled)
         self._refresh_answers()
         threading.Thread(target=self._run_worker, args=(q,), daemon=True).start()
 
@@ -923,7 +981,7 @@ class CompareDialog(wx.Dialog):
         if a:
             _nvda_speech.speak(a)
         try:
-            self.answer_ctrl.SetFocus()
+            self.question_input.SetFocus()
         except Exception:
             pass
 
@@ -1311,6 +1369,7 @@ class ViewerFrame(wx.Frame):
 
         # Ustaw tytuł zgodny z aktualnym trybem (domyślnie 'mieszany')
         self._update_title()
+        self._update_compare_button()
 
     # ------- ogłoszenia -------
     def _announce(self, text: str, ms: int = 1500):
@@ -1349,13 +1408,15 @@ class ViewerFrame(wx.Frame):
             self.visible_files = list(self.all_files)
 
     def _update_compare_button(self):
-        enabled = False
+        count = 0
         try:
-            enabled = (len(self._get_selected_rows()) >= 2)
+            count = len(self._get_selected_rows())
         except Exception:
-            enabled = False
+            count = 0
+        label = f"Porównaj {count}" if count > 0 else "Porównaj…"
         try:
-            self.compare_btn.Enable(enabled)
+            self.compare_btn.SetLabel(label)
+            self.compare_btn.Enable(count >= 2)
         except Exception:
             pass
 
