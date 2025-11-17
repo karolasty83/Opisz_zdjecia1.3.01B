@@ -9,14 +9,31 @@ on:
         default: "OpiszZdjecia"
   push:
     branches: [ main ]
+    tags:
+      - "*"
 
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      EXE_NAME: ${{ github.event.inputs.exe_name || 'OpiszZdjecia' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve exe name
+        shell: pwsh
+        run: |
+          $inputName = "${{ github.event.inputs.exe_name }}".Trim()
+          $refType = "${{ github.ref_type }}"
+          $refName = "${{ github.ref_name }}"
+          if (-not $inputName) {
+            if ($refType -eq "tag" -and $refName) {
+              $exe = "Opisz_zdjęcia$refName"
+            } else {
+              $exe = "OpiszZdjecia"
+            }
+          } else {
+            $exe = $inputName
+          }
+          "EXE_NAME=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up Python
         uses: actions/setup-python@v5
