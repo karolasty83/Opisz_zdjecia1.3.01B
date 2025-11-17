@@ -830,6 +830,144 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
             wx.Bell()
 
 
+class CompareDialog(wx.Dialog):
+    """Dialog do porównywania dwóch zaznaczonych zdjęć z historią pytań/odpowiedzi."""
+
+    def __init__(
+        self,
+        parent,
+        paths: list[str],
+        descriptions: list[str],
+        api_key: str,
+    ):
+        super().__init__(parent, title="Porównaj zdjęcia", size=(720, 520))
+        self._api_key = api_key
+        self._paths = list(paths or [])
+        self._descriptions = list(descriptions or [])
+        self._busy = False
+        self._history = []
+        self._pending_question = None
+
+        panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        header = wx.StaticText(panel, label="Porównaj zdjęcia")
+        vbox.Add(header, 0, wx.ALL, 8)
+
+        self.question_input = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)
+        self.question_input.SetHint("Wpisz pytanie do porównania…")
+        vbox.Add(self.question_input, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 8)
+
+        self.answer_ctrl = wx.TextCtrl(
+            panel,
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.TE_RICH2,
+        )
+        vbox.Add(self.answer_ctrl, 1, wx.EXPAND | wx.ALL, 8)
+
+        btn_row = wx.BoxSizer(wx.HORIZONTAL)
+        self.ask_btn = wx.Button(panel, label="Wyślij pytanie")
+        ok_btn = wx.Button(panel, wx.ID_OK, "Zamknij")
+        btn_row.Add(self.ask_btn, 0, wx.RIGHT, 8)
+        btn_row.Add(ok_btn, 0)
+        vbox.Add(btn_row, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+
+        panel.SetSizer(vbox)
+
+        self.ask_btn.Bind(wx.EVT_BUTTON, self.on_submit_question)
+        self.question_input.Bind(wx.EVT_TEXT_ENTER, self.on_submit_question)
+        self.Bind(wx.EVT_CHAR_HOOK, self.on_char_hook)
+
+        self._refresh_answers()
+
+    def on_char_hook(self, event: wx.KeyEvent):
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self.EndModal(wx.ID_OK)
+            return
+        event.Skip()
+
+    def on_submit_question(self, event):
+        if self._busy:
+            return
+        q = (self.question_input.GetValue() or "").strip()
+        if not q:
+            return
+        self._busy = True
+        self._pending_question = q
+        self.question_input.SetValue("")
+        self._refresh_answers()
+        threading.Thread(target=self._run_worker, args=(q,), daemon=True).start()
+
+    def _run_worker(self, question: str):
+        try:
+            answer = compare_images(
+                self._api_key,
+                question,
+                self._paths,
+                self._descriptions,
+                self._history,
+            )
+            wx.CallAfter(self._on_success, question, answer)
+        except Exception as e:
+            wx.CallAfter(self._on_error, str(e))
+
+    def _on_success(self, question: str, answer: str):
+        self._pending_question = None
+        q = (question or "").strip()
+        a = (answer or "").strip()
+        if q:
+            self._history.append({"role": "user", "text": q})
+        if a:
+            self._history.append({"role": "assistant", "text": a})
+        self._busy = False
+        self._refresh_answers()
+        if a:
+            _nvda_speech.speak(a)
+        try:
+            self.answer_ctrl.SetFocus()
+        except Exception:
+            pass
+
+    def _on_error(self, message: str):
+        self._pending_question = None
+        self._busy = False
+        self._refresh_answers()
+        wx.MessageBox(message, "Błąd porównania", wx.OK | wx.ICON_ERROR, parent=self)
+        try:
+            self.question_input.SetFocus()
+        except Exception:
+            pass
+
+    def _refresh_answers(self):
+        lines = []
+        for entry in self._history:
+            role = (entry.get("role") or "").lower()
+            text = entry.get("text") or ""
+            label = "Model" if role == "assistant" else "Ty"
+            if text:
+                lines.append(f"{label}:\n{text}")
+        if self._pending_question:
+            lines.append(f"Ty:\n{self._pending_question}")
+            lines.append("Model:\nProszę czekać…")
+        text = "\n\n".join(lines)
+        self.answer_ctrl.SetValue(text)
+        if self._pending_question:
+            wait_marker = "Model:\nProszę czekać…"
+            pos = text.rfind(wait_marker)
+            if pos != -1:
+                self.answer_ctrl.SetInsertionPoint(pos)
+                self.answer_ctrl.ShowPosition(pos)
+            else:
+                self.answer_ctrl.ShowPosition(self.answer_ctrl.GetLastPosition())
+        else:
+            model_marker = "Model:\n"
+            pos = text.rfind(model_marker)
+            if pos != -1:
+                self.answer_ctrl.SetInsertionPoint(pos)
+                self.answer_ctrl.ShowPosition(pos)
+            else:
+                self.answer_ctrl.ShowPosition(self.answer_ctrl.GetLastPosition())
+
+
 class CameraFollowupSession:
     """
     Przechowuje stan pytań dla obrazu pochodzącego z kamery.
@@ -1131,6 +1269,10 @@ class ViewerFrame(wx.Frame):
         vbox.Add(self._toast, 0, wx.EXPAND)
 
         topbar = wx.BoxSizer(wx.HORIZONTAL)
+        self.compare_btn = wx.Button(panel, label="Porównaj…")
+        self.compare_btn.Enable(False)
+        self.compare_btn.Bind(wx.EVT_BUTTON, lambda e: self._compare_selected())
+        topbar.Add(self.compare_btn, 0, wx.ALL, 6)
         back_btn = wx.Button(panel, label="Wstecz")
         back_btn.Bind(wx.EVT_BUTTON, self.on_back)
         topbar.Add(back_btn, 0, wx.ALL, 6)
@@ -1146,6 +1288,8 @@ class ViewerFrame(wx.Frame):
 
         self.list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_activate_enter)
         self.list.Bind(wx.EVT_KEY_DOWN, self.on_list_keydown)
+        self.list.Bind(wx.EVT_LIST_ITEM_SELECTED, lambda e: (self._update_compare_button(), e.Skip()))
+        self.list.Bind(wx.EVT_LIST_ITEM_DESELECTED, lambda e: (self._update_compare_button(), e.Skip()))
 
         # Menu kontekstowe (PPM)
         self.list.Bind(wx.EVT_CONTEXT_MENU, self.on_context_menu)
@@ -1203,6 +1347,17 @@ class ViewerFrame(wx.Frame):
                     self.visible_files.append(p)
         else:
             self.visible_files = list(self.all_files)
+
+    def _update_compare_button(self):
+        enabled = False
+        try:
+            enabled = (len(self._get_selected_rows()) >= 2)
+        except Exception:
+            enabled = False
+        try:
+            self.compare_btn.Enable(enabled)
+        except Exception:
+            pass
 
     def _set_filter_mode_next(self):
         order = ["mixed", "with", "without"]
@@ -1449,6 +1604,13 @@ class ViewerFrame(wx.Frame):
             self._copy_current(); return
         if ctrl and (code in (ord('F'), ord('f'))):
             self._open_search(); return
+        if ctrl and shift and (code in (ord('P'), ord('p'))):
+            try:
+                if len(self._get_selected_rows()) >= 2:
+                    self._compare_selected(); return
+            except Exception:
+                pass
+            wx.Bell(); return
         if code == wx.WXK_F2:
             # Blokuj F2/Shift+F2 przy wielokrotnym zaznaczeniu i pokaż komunikat
             try:
@@ -1488,21 +1650,6 @@ class ViewerFrame(wx.Frame):
                 else:
                     self.list.SetItemState(i, wx.LIST_STATE_SELECTED, wx.LIST_STATE_SELECTED)
                 self.list.Focus(i)
-            return
-        # Ctrl + strzałki: tylko zmień fokus, bez zmian selekcji
-        if ctrl and code in (wx.WXK_UP, wx.WXK_DOWN):
-            i = self.list.GetFocusedItem()
-            if i == -1:
-                i = self._current_row()
-            if i == -1:
-                return
-            if code == wx.WXK_UP:
-                ni = max(0, i - 1)
-            else:
-                ni = min(self.list.GetItemCount() - 1, i + 1)
-            if ni != i:
-                self.list.Focus(ni)
-                self.list.EnsureVisible(ni)
             return
         if code == wx.WXK_F11:
             # Blokuj F11 przy wielokrotnym zaznaczeniu i pokaż komunikat
@@ -1584,6 +1731,7 @@ class ViewerFrame(wx.Frame):
         self.ID_DEL_SEL   = wx.NewIdRef()
         self.ID_DESC_MANY = wx.NewIdRef()
         self.ID_DEL_FILE  = wx.NewIdRef()
+        self.ID_COMPARE   = wx.NewIdRef()
         m.Append(int(self.ID_DESC_NOW), "Opisz to zdjęcie teraz (F3)")
         try:
             _sel_rows = self._get_selected_rows()
@@ -1617,6 +1765,9 @@ class ViewerFrame(wx.Frame):
             _sel_count = len(_sel_rows)
         except Exception:
             _sel_count = 0
+        if _sel_count >= 2:
+            m.Append(int(self.ID_COMPARE), "Porównaj zaznaczone (Ctrl+Shift+P)")
+            self.Bind(wx.EVT_MENU, lambda e: self._compare_selected(), id=int(self.ID_COMPARE))
         if _sel_count > 1:
             self.Bind(wx.EVT_MENU, lambda e: self._describe_selected_many(), id=int(self.ID_DESC_MANY))
             m.Append(int(self.ID_DEL_SEL), "Usuń opisy zaznaczonych")
@@ -1669,6 +1820,48 @@ class ViewerFrame(wx.Frame):
         if row == -1 or row >= len(self.visible_files):
             return None
         return self.visible_files[row]
+
+    def _compare_selected(self):
+        try:
+            rows = self._get_selected_rows()
+        except Exception:
+            rows = []
+        if len(rows) < 2:
+            wx.MessageBox(
+                "Zaznacz co najmniej 2 pliki, aby porównać.",
+                "Porównanie niedostępne",
+                wx.OK | wx.ICON_INFORMATION,
+                parent=self,
+            )
+            return
+        rows = [r for r in rows if 0 <= r < len(self.visible_files)]
+        if len(rows) < 2:
+            return
+        paths = [self.visible_files[r] for r in rows]
+        if not paths or len(paths) < 2:
+            return
+        if not self.api_key:
+            try:
+                self.api_key = load_api_key()
+            except Exception as e:
+                wx.MessageBox(str(e), "Brak API", wx.OK | wx.ICON_ERROR, parent=self)
+                return
+
+        descs = []
+        for p in paths:
+            d = self.results.get(p)
+            if not (d and str(d).strip()):
+                try:
+                    d = read_description(p)
+                except Exception:
+                    d = ""
+            descs.append(d or "")
+
+        dlg = CompareDialog(self, paths, descs, self.api_key)
+        res = dlg.ShowModal()
+        dlg.Destroy()
+        if res == wx.ID_OK:
+            self.list.SetFocus()
 
     def _open_current_external(self):
         # Blokada przy wielokrotnym zaznaczeniu (także dla menu kontekstowego)
@@ -2109,6 +2302,7 @@ class ViewerFrame(wx.Frame):
             if i != -1:
                 self.list.Select(i); self.list.Focus(i); self.list.EnsureVisible(i)
             self._pending_focus_path = None
+        self._update_compare_button()
 
     def _get_default_prompt_text(self):
         if self._default_prompt_cache:

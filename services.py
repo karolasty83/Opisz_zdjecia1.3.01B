@@ -329,7 +329,7 @@ def _describe_bytes_with_openai(api_key: str, prompt_text: str, image_bytes: byt
     content = message.get("content", "")
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError(f"Brak treści odpowiedzi: {out}")
-        return content.strip()
+    return content.strip()
 
 def _describe_bytes_with_gemini(api_key: str, prompt_text: str, image_bytes: bytes, mime: str) -> str:
     url = GEMINI_ENDPOINT_TMPL.format(model=GEMINI_MODEL_NAME)
@@ -779,3 +779,191 @@ def _ask_followup_with_gemini_bytes(
         return content
     except Exception as e:
         raise RuntimeError(f"Niepoprawna odpowiedź Gemini: {e}")
+
+
+# -----------------------------------
+# Porównywanie dwóch obrazów
+# -----------------------------------
+def compare_images(
+    api_key: str,
+    question: str,
+    image_paths: list[str],
+    descriptions: list[str] | None = None,
+    history_messages=None,
+) -> str:
+    """
+    Porównuje wiele obrazów odpowiadając na pytanie użytkownika.
+
+    history_messages – iterowalny zbiór elementów {"role": "user"|"assistant", "text": "..."}.
+    """
+    q = (question or "").strip()
+    if not q:
+        raise RuntimeError("Pytanie nie może być puste.")
+    if not image_paths or len(image_paths) < 2:
+        raise RuntimeError("Wybierz co najmniej 2 obrazy do porównania.")
+    prov = (get_provider_from_config() or "openai").lower()
+    history = list(history_messages or [])
+    descriptions = descriptions or []
+    desc_map = {}
+    for idx, path in enumerate(image_paths):
+        try:
+            desc_map[path] = (descriptions[idx] or "").strip()
+        except Exception:
+            desc_map[path] = ""
+    if prov == "gemini":
+        return _compare_with_gemini(api_key, q, image_paths, desc_map, history)
+    return _compare_with_openai(api_key, q, image_paths, desc_map, history)
+
+
+def _build_compare_desc_block(desc_map: dict) -> str:
+    lines = []
+    for i, (path, desc) in enumerate(desc_map.items(), start=1):
+        if desc:
+            lines.append(f"Opis obrazu {i}: {desc}")
+    return "\n".join(lines).strip()
+
+
+def _compare_with_openai(
+    api_key: str,
+    question: str,
+    image_paths: list[str],
+    desc_map: dict,
+    history,
+) -> str:
+    url = OPENAI_CHAT_COMPLETIONS_URL
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    desc_block = _build_compare_desc_block(desc_map)
+
+    contents = [
+        {
+            "type": "text",
+            "text": f"Masz {len(image_paths)} obrazy. Oceń je względem pytania użytkownika.",
+        }
+    ]
+    if desc_block:
+        contents.append({"type": "text", "text": desc_block})
+    for idx, path in enumerate(image_paths, start=1):
+        label = f"Obraz {idx}:"
+        img_url = encode_image_to_base64_data_url(path)
+        contents.extend([
+            {"type": "text", "text": label},
+            {"type": "image_url", "image_url": {"url": img_url}},
+        ])
+
+    messages = [
+        {
+            "role": "user",
+            "content": contents,
+        }
+    ]
+
+    for item in history:
+        try:
+            text = (item or {}).get("text", "").strip()
+            role = (item or {}).get("role", "").strip().lower()
+        except Exception:
+            continue
+        if not text:
+            continue
+        msg_role = "assistant" if role == "assistant" else "user"
+        messages.append({
+            "role": msg_role,
+            "content": [{"type": "text", "text": text}],
+        })
+
+    messages.append({
+        "role": "user",
+        "content": [{"type": "text", "text": question}],
+    })
+
+    payload = {"model": MODEL_NAME, "messages": messages}
+    resp = requests.post(url, headers=headers, json=payload, timeout=90)
+    if resp.status_code != 200:
+        raise RuntimeError(f"API error {resp.status_code}: {resp.text}")
+    out = resp.json()
+    if "error" in out:
+        raise RuntimeError(f"API zwróciło błąd: {out['error']}")
+    choices = out.get("choices")
+    if not choices:
+        raise RuntimeError(f"Odpowiedź bez 'choices': {out}")
+    message = choices[0].get("message", {})
+    content = message.get("content", "")
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError(f"Brak treści odpowiedzi: {out}")
+    return content.strip()
+
+
+def _compare_with_gemini(
+    api_key: str,
+    question: str,
+    image_paths: list[str],
+    desc_map: dict,
+    history,
+) -> str:
+    desc_block = _build_compare_desc_block(desc_map)
+
+    url = GEMINI_ENDPOINT_TMPL.format(model=GEMINI_MODEL_NAME)
+    params = {"key": api_key}
+    headers = {"Content-Type": "application/json"}
+
+    parts = [
+        {"text": f"Masz {len(image_paths)} obrazy. Oceń je względem pytania użytkownika."},
+    ]
+    if desc_block:
+        parts.append({"text": desc_block})
+    for idx, path in enumerate(image_paths, start=1):
+        mime = guess_mime(path)
+        b64 = read_image_as_base64(path)
+        parts.extend([
+            {"text": f"Obraz {idx}:"},
+            {"inline_data": {"mime_type": mime, "data": b64}},
+        ])
+
+    contents = [
+        {
+            "role": "user",
+            "parts": parts,
+        }
+    ]
+
+    for item in history:
+        try:
+            text = (item or {}).get("text", "").strip()
+            role = (item or {}).get("role", "").strip().lower()
+        except Exception:
+            continue
+        if not text:
+            continue
+        role_name = "model" if role == "assistant" else "user"
+        contents.append({
+            "role": role_name,
+            "parts": [{"text": text}],
+        })
+
+    contents.append({
+        "role": "user",
+        "parts": [{"text": question}],
+    })
+
+    payload = {"contents": contents}
+    resp = requests.post(url, params=params, headers=headers, json=payload, timeout=90)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini error {resp.status_code}: {resp.text}")
+
+    data = resp.json()
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise RuntimeError(f"Brak 'candidates' w odpowiedzi: {data}")
+    parts_out = candidates[0].get("content", {}).get("parts") or []
+    texts = []
+    for p in parts_out:
+        t = p.get("text")
+        if isinstance(t, str) and t.strip():
+            texts.append(t.strip())
+    content = "\n".join(texts).strip()
+    if not content:
+        raise RuntimeError(f"Brak treści w odpowiedzi Gemini: {data}")
+    return content
