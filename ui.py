@@ -3124,22 +3124,58 @@ class ApiSettingsPanel(wx.Panel):
         openai_val = (cfg.get(OPENAI_API_KEY_FIELD) or "").strip()
         gemini_val = (cfg.get(GEMINI_API_KEY_FIELD) or "").strip()
         provider    = (cfg.get(PROVIDER_FIELD) or "").strip().lower()
+        openai_model_val = (cfg.get(OPENAI_MODEL_FIELD) or DEFAULT_OPENAI_MODEL).strip() or DEFAULT_OPENAI_MODEL
+        gemini_model_val = (cfg.get(GEMINI_MODEL_FIELD) or DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
 
-        # --- dwa pola wielowierszowe ---
-        grid = wx.FlexGridSizer(2, 2, 10, 10)
-        grid.AddGrowableCol(1, 1)
+        self._openai_models = [
+            ("gpt-5", "GPT-5"),
+            ("gpt-4o", "GPT-4o"),
+        ]
+        self._gemini_models = [
+            ("gemini-2.5-flash", "Gemini 2.5 Flash"),
+            ("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"),
+            ("gemini-2.5-pro", "Gemini 2.5 Pro"),
+        ]
+        self._openai_model_value = self._resolve_model_value(openai_model_val, self._openai_models, DEFAULT_OPENAI_MODEL)
+        self._gemini_model_value = self._resolve_model_value(gemini_model_val, self._gemini_models, DEFAULT_GEMINI_MODEL)
 
-        grid.Add(wx.StaticText(self, label="klucz Openai:"), 0, wx.ALIGN_TOP)
+        # --- OpenAI ---
+        openai_box = wx.BoxSizer(wx.VERTICAL)
+        openai_box.Add(wx.StaticText(self, label="OpenAI"), 0, wx.BOTTOM, 4)
+        openai_box.Add(wx.StaticText(self, label="Klucz OpenAI:"), 0, wx.BOTTOM, 4)
         self.api_openai = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_DONTWRAP, value=openai_val)
         self.api_openai.SetMinSize((200, 120))
-        grid.Add(self.api_openai, 1, wx.EXPAND)
+        openai_box.Add(self.api_openai, 0, wx.EXPAND)
+        label_openai = wx.StaticText(self, label="Wybierz model OpenAI:")
+        label_openai.SetName("Wybierz model OpenAI")
+        self._openai_model_radios = self._build_model_radios(
+            parent=self,
+            target_sizer=openai_box,
+            options=self._openai_models,
+            current_value=self._openai_model_value,
+            on_change=self._set_openai_model_value,
+            group_label="Model OpenAI",
+        )
+        vbox.Add(openai_box, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
 
-        grid.Add(wx.StaticText(self, label="Klucz Gemini:"), 0, wx.ALIGN_TOP)
+        # --- Gemini ---
+        gemini_box = wx.BoxSizer(wx.VERTICAL)
+        gemini_box.Add(wx.StaticText(self, label="Gemini"), 0, wx.BOTTOM, 4)
+        gemini_box.Add(wx.StaticText(self, label="Klucz Gemini:"), 0, wx.BOTTOM, 4)
         self.api_gemini = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_DONTWRAP, value=gemini_val)
         self.api_gemini.SetMinSize((200, 120))
-        grid.Add(self.api_gemini, 1, wx.EXPAND)
-
-        vbox.Add(grid, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
+        gemini_box.Add(self.api_gemini, 0, wx.EXPAND)
+        label_gemini = wx.StaticText(self, label="Wybierz model Gemini:")
+        label_gemini.SetName("Wybierz model Gemini")
+        self._gemini_model_radios = self._build_model_radios(
+            parent=self,
+            target_sizer=gemini_box,
+            options=self._gemini_models,
+            current_value=self._gemini_model_value,
+            on_change=self._set_gemini_model_value,
+            group_label="Model Gemini",
+        )
+        vbox.Add(gemini_box, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
 
         # --- RadioBox: wybór providera (pionowo, dobra nawigacja strzałkami góra/dół) ---
         self.rb_provider = wx.RadioBox(
@@ -3159,15 +3195,20 @@ class ApiSettingsPanel(wx.Panel):
         else:
             self.rb_provider.SetSelection(0)
 
-        # widoczność RadioBoxa tylko gdy oba pola są niepuste
-        def refresh_provider_visibility(_evt=None):
-            both = bool(self.api_openai.GetValue().strip()) and bool(self.api_gemini.GetValue().strip())
-            self.rb_provider.Show(both)
+        # dynamiczna aktywność kontrolek
+        def refresh_dynamic_controls(_evt=None):
+            openai_has_key = bool(self.api_openai.GetValue().strip())
+            gemini_has_key = bool(self.api_gemini.GetValue().strip())
+            for radio, _ in self._openai_model_radios:
+                radio.Enable(openai_has_key)
+            for radio, _ in self._gemini_model_radios:
+                radio.Enable(gemini_has_key)
+            self.rb_provider.Show(openai_has_key and gemini_has_key)
             self.Layout()
 
-        self.api_openai.Bind(wx.EVT_TEXT, refresh_provider_visibility)
-        self.api_gemini.Bind(wx.EVT_TEXT, refresh_provider_visibility)
-        refresh_provider_visibility()
+        self.api_openai.Bind(wx.EVT_TEXT, refresh_dynamic_controls)
+        self.api_gemini.Bind(wx.EVT_TEXT, refresh_dynamic_controls)
+        refresh_dynamic_controls()
 
     def get_value(self) -> tuple[str, str, str]:
         openai_key = self.api_openai.GetValue().strip()
@@ -3183,12 +3224,51 @@ class ApiSettingsPanel(wx.Panel):
             provider = ""
         return openai_key, gemini_key, provider
 
+    def _set_openai_model_value(self, value: str):
+        self._openai_model_value = value
+
+    def _set_gemini_model_value(self, value: str):
+        self._gemini_model_value = value
+
+    def _build_model_radios(
+        self,
+        parent,
+        target_sizer,
+        options: list[tuple[str, str]],
+        current_value: str,
+        on_change,
+        group_label: str,
+    ) -> list[tuple[wx.RadioButton, str]]:
+        radios = []
+        resolved_value = self._resolve_model_value(current_value, options, options[0][0] if options else "")
+        for idx, (value, label) in enumerate(options):
+            style = wx.RB_GROUP if idx == 0 else 0
+            radio_label = f"{group_label}: {label}"
+            radio = wx.RadioButton(parent, label=radio_label, style=style)
+            radio.SetValue(value == resolved_value)
+            radio.Bind(wx.EVT_RADIOBUTTON, lambda evt, v=value: on_change(v))
+            target_sizer.Add(radio, 0, wx.BOTTOM, 2)
+            radios.append((radio, value))
+        return radios
+
+    def _resolve_model_value(self, target: str, options: list[tuple[str, str]], fallback: str) -> str:
+        values = [value for value, _ in options]
+        target = (target or "").strip()
+        if target in values:
+            return target
+        fallback = (fallback or "").strip()
+        if fallback in values:
+            return fallback
+        return values[0] if values else fallback
+
     def save_to_config(self) -> bool:
         openai_key, gemini_key, provider = self.get_value()
 
         # zapis kluczy
         set_openai_key_in_config(openai_key)
         set_gemini_key_in_config(gemini_key)
+        set_openai_model_in_config(self._openai_model_value)
+        set_gemini_model_in_config(self._gemini_model_value)
 
         # zapis providera
         if provider:

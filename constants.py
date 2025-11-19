@@ -7,8 +7,11 @@
 
 SUPPORTED_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
-# Modele
-MODEL_NAME = "gpt-5"  # multimodalny model (tekst + obraz) – dla OpenAI
+# Modele i klucze konfiguracyjne
+DEFAULT_OPENAI_MODEL = "gpt-5"  # multimodalny model (tekst + obraz) – dla OpenAI
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+OPENAI_MODEL_FIELD = "openai_model"
+GEMINI_MODEL_FIELD = "gemini_model"
 
 # Pliki konfiguracyjne
 PROMPTS_FILE = "prompts.json"   # w folderze programu

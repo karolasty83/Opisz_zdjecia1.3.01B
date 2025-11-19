@@ -18,6 +18,10 @@ from constants import (
     CAMERA_SAVE_PHOTOS_FIELD,
     CAMERA_PLAY_SOUND_FIELD,
     FOLLOWUP_PLAY_SOUND_FIELD,
+    OPENAI_MODEL_FIELD,
+    GEMINI_MODEL_FIELD,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_GEMINI_MODEL,
 )
 
 # -----------------------------------
@@ -63,6 +67,8 @@ def ensure_config():
         OPENAI_API_KEY_FIELD: "",
         GEMINI_API_KEY_FIELD: "",
         PROVIDER_FIELD: "",   # "openai" | "gemini" | ""
+        OPENAI_MODEL_FIELD: DEFAULT_OPENAI_MODEL,
+        GEMINI_MODEL_FIELD: DEFAULT_GEMINI_MODEL,
         CAMERA_SAVE_PHOTOS_FIELD: False,
         CAMERA_PLAY_SOUND_FIELD: True,
         FOLLOWUP_PLAY_SOUND_FIELD: True,
@@ -143,6 +149,28 @@ def set_provider_in_config(provider: str):
         provider = ""
     cfg = load_config()
     cfg[PROVIDER_FIELD] = provider
+    save_config(cfg)
+
+def get_openai_model_from_config() -> str:
+    cfg = load_config()
+    value = (cfg.get(OPENAI_MODEL_FIELD) or "").strip()
+    return value or DEFAULT_OPENAI_MODEL
+
+def set_openai_model_in_config(model_name: str):
+    model_name = (model_name or "").strip() or DEFAULT_OPENAI_MODEL
+    cfg = load_config()
+    cfg[OPENAI_MODEL_FIELD] = model_name
+    save_config(cfg)
+
+def get_gemini_model_from_config() -> str:
+    cfg = load_config()
+    value = (cfg.get(GEMINI_MODEL_FIELD) or "").strip()
+    return value or DEFAULT_GEMINI_MODEL
+
+def set_gemini_model_in_config(model_name: str):
+    model_name = (model_name or "").strip() or DEFAULT_GEMINI_MODEL
+    cfg = load_config()
+    cfg[GEMINI_MODEL_FIELD] = model_name
     save_config(cfg)
 
 def get_camera_save_photos_from_config() -> bool:
