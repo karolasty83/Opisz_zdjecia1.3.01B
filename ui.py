@@ -129,20 +129,24 @@ def _strip_stars(messages: list[dict] | None, base_text: str | None = None):
     msgs = list(messages or [])
     last_idx = None
     last_text = None
+    found_star = False
     for idx in range(len(msgs) - 1, -1, -1):
         entry = msgs[idx] or {}
         if (entry.get("role") or "").lower() == "assistant":
             text = entry.get("text") or ""
-            if text.strip():
+            if "*" in text:
                 last_idx = idx
                 last_text = text
+                found_star = True
                 break
-    if last_text is not None:
+            if text.strip() and last_idx is None:
+                # zapamiętaj ostatnią odpowiedź, nawet bez '*' (na wypadek braku poprzednich)
+                last_idx = idx
+                last_text = text
+    if found_star and last_idx is not None and last_text is not None:
         cleaned = last_text.replace("*", "")
-        if cleaned != last_text:
-            msgs[last_idx]["text"] = cleaned
-            return True, "message", cleaned, msgs
-        return False, None, None, msgs
+        msgs[last_idx]["text"] = cleaned
+        return True, "message", cleaned, msgs
 
     if base_text is not None:
         cleaned = base_text.replace("*", "")
@@ -618,6 +622,10 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
         if not question:
             return
         if question.lower() == "/o":
+            if self._question_input:
+                self._question_input.SetValue("")
+            self._pending_question = None
+            self._refresh_answer_field()
             self._handle_overwrite_command()
             return
         if question.strip() == "/*":
@@ -662,19 +670,38 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
                     last_answer = text
                     break
         if not last_answer:
-            wx.MessageBox("Brak odpowiedzi modelu do zapisania.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
+            try:
+                _nvda_speech.speak("Brak odpowiedzi modelu do zapisania.")
+            except Exception:
+                pass
             return
 
         new_desc = last_answer.strip()
         if not new_desc:
-            wx.MessageBox("Odpowiedź modelu jest pusta.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
+            try:
+                _nvda_speech.speak("Odpowiedź modelu jest pusta.")
+            except Exception:
+                pass
             return
+        if self._question_input:
+            self._question_input.SetValue("")
+            self._pending_question = None
 
         try:
             add_description(self._image_path, new_desc)
         except Exception as e:
             wx.MessageBox(f"Nie udało się zapisać opisu:\n{e}", "Błąd zapisu", wx.OK | wx.ICON_ERROR, parent=self)
             return
+        try:
+            remove_from_append_report([os.path.basename(self._image_path)])
+            write_txt_report_if_needed([(os.path.basename(self._image_path), new_desc)], 1, parent=self)
+        except Exception:
+            pass
+        try:
+            self.txt.SetValue(new_desc)
+            self.txt.SetInsertionPoint(0)
+        except Exception:
+            pass
 
         try:
             self._viewer.update_result(self._image_path, new_desc, state.get("prompt") if state else None)
@@ -696,6 +723,10 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
         if isinstance(state, dict):
             state["base_description"] = new_desc
         self._followup_state = state
+        try:
+            _nvda_speech.speak("Zaktualizowano opis.")
+        except Exception:
+            pass
 
     def _handle_strip_stars_command(self):
         if self._question_input:
@@ -705,7 +736,10 @@ class ReadOnlyDescriptionDialog(wx.Dialog):
         base_desc = state.get("base_description") or self.txt.GetValue() or ""
         changed, target, cleaned, messages = _strip_stars(messages, base_desc)
         if not changed:
-            wx.MessageBox("Nie znaleziono znaku *.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
+            try:
+                _nvda_speech.speak("Nie znaleziono znaku gwiazdka.")
+            except Exception:
+                pass
             return
         if target == "message":
             state["messages"] = messages
@@ -1634,6 +1668,11 @@ class ViewerFrame(wx.Frame):
             dialog.txt.SetFocus()
         except Exception:
             pass
+        try:
+            result_entry = [(os.path.basename(path), description or "")]
+            write_txt_report_if_needed(result_entry, 1, parent=self)
+        except Exception:
+            pass
         self.populate_list()
         return
 
@@ -2071,10 +2110,17 @@ class ViewerFrame(wx.Frame):
         res = ask_yes_no(self, question, "Potwierdzenie", wx.ICON_QUESTION)
         if res != wx.ID_YES:
             return
+        removed_names = []
         for p in paths:
             try:
                 self.results[p] = ""
                 remove_description(p)
+                removed_names.append(os.path.basename(p))
+            except Exception:
+                pass
+        if removed_names:
+            try:
+                remove_from_append_report(removed_names)
             except Exception:
                 pass
         # Ustal fokus po operacji: preferuj sąsiada od pozycji z fokusem
@@ -2163,6 +2209,11 @@ class ViewerFrame(wx.Frame):
             self.list.SetFocus()
             return
 
+        try:
+            remove_from_append_report([os.path.basename(p) for p in removed])
+        except Exception:
+            pass
+
         removed_set = set(removed)
         for container in (self.all_files, self.visible_files):
             container[:] = [p for p in container if p not in removed_set]
@@ -2199,8 +2250,18 @@ class ViewerFrame(wx.Frame):
             self.results[path] = new_text
             if new_text:
                 add_description(path, new_text)
+                try:
+                    # Zastąp wpis w raporcie append: usuń stary blok i dopisz nowy
+                    remove_from_append_report([os.path.basename(path)])
+                    write_txt_report_if_needed([(os.path.basename(path), new_text)], 1, parent=self)
+                except Exception:
+                    pass
             else:
                 remove_description(path)
+                try:
+                    remove_from_append_report([os.path.basename(path)])
+                except Exception:
+                    pass
             # teraz pełne odświeżenie listy, by filtr i status zadziałały od razu
             will_disappear = (
                 (self.filter_mode == "with" and not new_text) or
@@ -2239,6 +2300,10 @@ class ViewerFrame(wx.Frame):
             return
         self.results[path] = ""
         remove_description(path)
+        try:
+            remove_from_append_report([os.path.basename(path)])
+        except Exception:
+            pass
         # Fokus i widok po usunięciu w zależności od filtra
         if self.filter_mode == "with":
             # zniknie z listy: ustaw sąsiada (następny, potem poprzedni)
@@ -2549,61 +2614,7 @@ class ProgressFrame(wx.Frame):
 
     def _write_txt_report_if_needed(self):
         """Zapis raportów TXT w FOLDERZE ROBOCZYM (zgodnie z wymaganiami)."""
-        cfg = load_config()
-        if not cfg.get("generate_txt_report", False):
-            return None
-
-        mode = cfg.get("txt_report_mode", "session")
-        now = datetime.now()
-        wf = working_dir()
-
-        if mode == "append":
-            base = (cfg.get("txt_append_filename") or "").strip()
-            if not base:
-                wx.MessageBox(
-                    "Nie podano nazwy pliku dla trybu 'nadpisywany plik txt'. "
-                    "Ustaw ją w Ustawieniach → Ogólne.",
-                    "Brak nazwy pliku", wx.OK | wx.ICON_WARNING, parent=self
-                )
-                return None
-            filename = f"{base}.txt"
-            path = os.path.join(wf, filename)
-            try:
-                with open(path, "a", encoding="utf-8") as f:
-                    for fname, desc in self.results:
-                        f.write(f"{fname}\n")
-                        f.write(f"{desc}\n\n")
-            except Exception as e:
-                wx.MessageBox(
-                    f"Nie udało się zapisać do pliku TXT (tryb nadpisywany):\n{e}!",
-                    "Błąd zapisu", wx.OK | wx.ICON_ERROR, parent=self
-                )
-                return None
-            return path
-
-        # tryb "1 plik na sesję"
-        name_stamp = now.strftime("%d.%m.%y %H-%M")
-        filename = f"Opis zdjęć {name_stamp}.txt"
-        path = os.path.join(wf, filename)
-
-        lines = [f"Liczba opisanych zdjęć: {self.ok}"]
-        for fname, desc in self.results:
-            lines.append(f"{fname}")
-            lines.append(desc)
-            lines.append("")
-        lines.append("Raport wygenerowany: " + now.strftime("%d.%m.%Y %H:%M"))
-
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-        except Exception as e:
-            wx.MessageBox(
-                f"Nie udało się zapisać raportu TXT:\n{e}",
-                "Błąd zapisu", wx.OK | wx.ICON_ERROR, parent=self
-            )
-            return None
-
-        return path
+        return write_txt_report_if_needed(self.results, self.ok, parent=self)
 
     def on_all_done(self):
         # Jeśli anulowano – wróć do poprzedniego okna bez podsumowań
@@ -2966,10 +2977,6 @@ class GeneralSettingsPanel(wx.Panel):
         self.cb_generate.SetValue(generate)
         vbox.Add(self.cb_generate, 0, wx.ALL | wx.EXPAND, 12)
 
-        self.cb_answer_sound = wx.CheckBox(self, label="Odtwarzaj dźwięk przy wysyłaniu pytań do modeli")
-        self.cb_answer_sound.SetValue(get_followup_play_sound_from_config())
-        vbox.Add(self.cb_answer_sound, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
-
         # --- RadioBox trybu zapisu ---
         self.rb_mode = wx.RadioBox(
             self,
@@ -2992,6 +2999,10 @@ class GeneralSettingsPanel(wx.Panel):
         append_row.Add(self.lbl_append, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
         append_row.Add(self.txt_append, 1, wx.ALIGN_CENTER_VERTICAL)
         vbox.Add(append_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
+
+        self.cb_answer_sound = wx.CheckBox(self, label="Odtwarzaj dźwięk przy wysyłaniu pytań do modeli")
+        self.cb_answer_sound.SetValue(get_followup_play_sound_from_config())
+        vbox.Add(self.cb_answer_sound, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
 
         self.SetSizer(vbox)
 

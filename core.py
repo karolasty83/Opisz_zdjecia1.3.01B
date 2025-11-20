@@ -496,8 +496,8 @@ def update_append_report_filename(old_name: str, new_name: str):
             content, ending = line[:-1], "\r"
         else:
             content, ending = line, ""
-        if content == old_name:
-            updated.append(new_name + ending)
+        if _normalize_report_name(content) == _normalize_report_name(old_name):
+            updated.append(_format_report_header(new_name) + ending)
             changed = True
         else:
             updated.append(line)
@@ -510,4 +510,122 @@ def update_append_report_filename(old_name: str, new_name: str):
             f.writelines(updated)
     except Exception:
         # Brak komunikatu – aktualizacja raportu nie powinna blokować dalszej pracy
+        return
+
+
+def write_txt_report_if_needed(results: list[tuple[str, str]], ok_count: int, parent=None):
+    """Generuje raport TXT zgodnie z ustawieniami. Zwraca ścieżkę lub None."""
+    cfg = load_config()
+    if not cfg.get("generate_txt_report", False):
+        return None
+
+    mode = cfg.get("txt_report_mode", "session")
+    now = datetime.now()
+    wf = working_dir()
+
+    if mode == "append":
+        base = (cfg.get("txt_append_filename") or "").strip()
+        if not base:
+            wx.MessageBox(
+                "Nie podano nazwy pliku dla trybu 'nadpisywany plik txt'. "
+                "Ustaw ją w Ustawieniach → Ogólne.",
+                "Brak nazwy pliku", wx.OK | wx.ICON_WARNING, parent=parent
+            )
+            return None
+        filename = f"{base}.txt"
+        path = os.path.join(wf, filename)
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                for fname, desc in results:
+                    f.write(f"{_format_report_header(fname)}\n")
+                    f.write(f"{desc}\n\n")
+        except Exception as e:
+            wx.MessageBox(
+                f"Nie udało się zapisać do pliku TXT (tryb nadpisywany):\n{e}!",
+                "Błąd zapisu", wx.OK | wx.ICON_ERROR, parent=parent
+            )
+            return None
+        return path
+
+    # tryb "1 plik na sesję"
+    name_stamp = now.strftime("%d.%m.%y %H-%M")
+    filename = f"Opis zdjęć {name_stamp}.txt"
+    path = os.path.join(wf, filename)
+
+    lines = [f"Liczba opisanych zdjęć: {ok_count}"]
+    for fname, desc in results:
+        lines.append(_format_report_header(fname))
+        lines.append(desc)
+        lines.append("")
+    lines.append("Raport wygenerowany: " + now.strftime("%d.%m.%Y %H:%M"))
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+    except Exception as e:
+        wx.MessageBox(
+            f"Nie udało się zapisać raportu TXT:\n{e}",
+            "Błąd zapisu", wx.OK | wx.ICON_ERROR, parent=parent
+        )
+        return None
+
+    return path
+
+
+def _normalize_report_name(text: str) -> str:
+    return (text or "").strip().strip('"').strip("'")
+
+
+def _format_report_header(filename: str) -> str:
+    return f"\"{(filename or '').strip()}\""
+
+
+def remove_from_append_report(file_names: list[str]):
+    """Usuwa wpisy (po nazwie pliku) z raportu append. Milczy przy błędach."""
+    if not file_names:
+        return
+    cfg = load_config()
+    if not cfg.get("generate_txt_report", False):
+        return
+    if cfg.get("txt_report_mode", "session") != "append":
+        return
+    base = (cfg.get("txt_append_filename") or "").strip()
+    if not base:
+        return
+    report_path = os.path.join(working_dir(), f"{base}.txt")
+    if not os.path.exists(report_path):
+        return
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except Exception:
+        return
+
+    targets = {_normalize_report_name(n) for n in file_names if _normalize_report_name(n)}
+    if not targets:
+        return
+
+    def _is_filename_line(line: str) -> bool:
+        name = _normalize_report_name(line).lower()
+        return bool(name) and any(name.endswith(ext) for ext in SUPPORTED_EXTS)
+
+    new_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if _normalize_report_name(line) in targets:
+            i += 1
+            # Pomijaj kolejne linie opisu aż do kolejnej nazwy pliku (samodzielna linia)
+            while i < len(lines):
+                if _is_filename_line(lines[i]):
+                    break
+                i += 1
+            continue
+        new_lines.append(line)
+        i += 1
+
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception:
         return
