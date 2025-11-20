@@ -11,6 +11,7 @@ from core import (
     get_gemini_batch_pause_from_config,
     get_openai_model_from_config,
     get_gemini_model_from_config,
+    get_compare_attach_descriptions_from_config,
 )
 
 # -----------------------------------
@@ -812,11 +813,13 @@ def compare_images(
     history = list(history_messages or [])
     descriptions = descriptions or []
     desc_map = {}
-    for idx, path in enumerate(image_paths):
-        try:
-            desc_map[path] = (descriptions[idx] or "").strip()
-        except Exception:
-            desc_map[path] = ""
+    attach_desc = bool(get_compare_attach_descriptions_from_config())
+    if attach_desc:
+        for idx, path in enumerate(image_paths):
+            try:
+                desc_map[path] = (descriptions[idx] or "").strip()
+            except Exception:
+                desc_map[path] = ""
     if prov == "gemini":
         return _compare_with_gemini(api_key, q, image_paths, desc_map, history)
     return _compare_with_openai(api_key, q, image_paths, desc_map, history)

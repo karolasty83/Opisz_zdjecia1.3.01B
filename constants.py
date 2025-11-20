@@ -24,6 +24,7 @@ PROVIDER_FIELD = "provider"               # NOWE: "openai" | "gemini"
 CAMERA_SAVE_PHOTOS_FIELD = "camera_save_photos"
 CAMERA_PLAY_SOUND_FIELD = "camera_play_sound"
 FOLLOWUP_PLAY_SOUND_FIELD = "followup_play_sound"
+COMPARE_ATTACH_DESCRIPTIONS_FIELD = "compare_attach_descriptions"
 
 # Zaawansowane opcje (konfiguracja limitów / wątków)
 GPT_THREADS_FIELD = "gpt_threads"                 # liczba wątków dla GPT/OpenAI

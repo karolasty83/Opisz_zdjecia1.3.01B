@@ -18,6 +18,7 @@ from constants import (
     CAMERA_SAVE_PHOTOS_FIELD,
     CAMERA_PLAY_SOUND_FIELD,
     FOLLOWUP_PLAY_SOUND_FIELD,
+    COMPARE_ATTACH_DESCRIPTIONS_FIELD,
     OPENAI_MODEL_FIELD,
     GEMINI_MODEL_FIELD,
     DEFAULT_OPENAI_MODEL,
@@ -72,6 +73,7 @@ def ensure_config():
         CAMERA_SAVE_PHOTOS_FIELD: False,
         CAMERA_PLAY_SOUND_FIELD: True,
         FOLLOWUP_PLAY_SOUND_FIELD: True,
+        COMPARE_ATTACH_DESCRIPTIONS_FIELD: True,
         # Zaawansowane opcje
         GPT_THREADS_FIELD: DEFAULT_GPT_THREADS,
         GEMINI_RPM_FIELD: DEFAULT_GEMINI_RPM,
@@ -198,6 +200,15 @@ def get_followup_play_sound_from_config() -> bool:
 def set_followup_play_sound_in_config(enabled: bool):
     cfg = load_config()
     cfg[FOLLOWUP_PLAY_SOUND_FIELD] = bool(enabled)
+    save_config(cfg)
+
+def get_compare_attach_descriptions_from_config() -> bool:
+    cfg = load_config()
+    return bool(cfg.get(COMPARE_ATTACH_DESCRIPTIONS_FIELD, True))
+
+def set_compare_attach_descriptions_in_config(enabled: bool):
+    cfg = load_config()
+    cfg[COMPARE_ATTACH_DESCRIPTIONS_FIELD] = bool(enabled)
     save_config(cfg)
 
 # --- zaawansowane opcje ---

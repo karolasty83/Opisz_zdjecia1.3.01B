@@ -3325,6 +3325,33 @@ class CameraSettingsPanel(wx.Panel):
         self.cb_save.SetFocus()
 
 
+class CompareSettingsPanel(wx.Panel):
+    """Panel ustawień porównywarki."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        info = wx.StaticText(
+            self,
+            label="Kontroluj, czy przy porównywaniu zdjęć wysyłać także zapisane opisy (jeśli istnieją).",
+        )
+        vbox.Add(info, 0, wx.ALL | wx.EXPAND, 12)
+
+        self.cb_attach = wx.CheckBox(self, label="Dołączaj opisy zdjęć do porównywarki, jeśli istnieją")
+        self.cb_attach.SetValue(get_compare_attach_descriptions_from_config())
+        vbox.Add(self.cb_attach, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.EXPAND, 12)
+
+        self.SetSizer(vbox)
+
+    def save_to_config(self) -> bool:
+        set_compare_attach_descriptions_in_config(self.cb_attach.GetValue())
+        return True
+
+    def focus_first(self):
+        self.cb_attach.SetFocus()
+
+
 class AdvancedSettingsPanel(wx.Panel):
     """Opcje zaawansowane: wątki GPT i limity Gemini.
     - Liczba wątków dla GPT
@@ -3383,7 +3410,7 @@ class AdvancedSettingsPanel(wx.Panel):
         self.txt_gpt_threads.SetFocus()
 
 class SettingsDialog(wx.Dialog):
-    """Dialog z kategoriami: Ogólne + Edytor promptów + Folder roboczy + Klucze api + Zdjęcia z kamery + Opcje zaawansowane.
+    """Dialog z kategoriami: Ogólne + Edytor promptów + Folder roboczy + Klucze api + Zdjęcia z kamery + Porównywarka + Opcje zaawansowane.
 
     start_category:
         0 = Ogólne
@@ -3391,7 +3418,8 @@ class SettingsDialog(wx.Dialog):
         2 = Folder roboczy
         3 = Klucze api
         4 = Zdjęcia z kamery
-        5 = Opcje zaawansowane
+        5 = Porównywarka
+        6 = Opcje zaawansowane
     """
     def __init__(self, parent, start_category=0):
         super().__init__(parent, title="Ustawienia", size=(1000, 600))
@@ -3403,7 +3431,7 @@ class SettingsDialog(wx.Dialog):
         left_label = wx.StaticText(panel, label="Kategorie")
         self.categories = wx.ListBox(
             panel,
-            choices=["Ogólne", "Edytor promptów", "Folder roboczy", "Klucze api", "Zdjęcia z kamery", "Opcje zaawansowane"],
+            choices=["Ogólne", "Edytor promptów", "Folder roboczy", "Klucze api", "Zdjęcia z kamery", "Porównywarka", "Opcje zaawansowane"],
             style=wx.LB_SINGLE,
         )
         self.categories.SetName("Kategorie")
@@ -3421,6 +3449,7 @@ class SettingsDialog(wx.Dialog):
         self.working_panel = WorkingFolderPanel(self.stack)
         self.api_panel = ApiSettingsPanel(self.stack)
         self.camera_panel = CameraSettingsPanel(self.stack)
+        self.compare_panel = CompareSettingsPanel(self.stack)
         self.advanced_panel = AdvancedSettingsPanel(self.stack)
 
         self.stack_sizer.Add(self.general_panel, 1, wx.EXPAND)
@@ -3428,6 +3457,7 @@ class SettingsDialog(wx.Dialog):
         self.stack_sizer.Add(self.working_panel, 1, wx.EXPAND)
         self.stack_sizer.Add(self.api_panel, 1, wx.EXPAND)
         self.stack_sizer.Add(self.camera_panel, 1, wx.EXPAND)
+        self.stack_sizer.Add(self.compare_panel, 1, wx.EXPAND)
         self.stack_sizer.Add(self.advanced_panel, 1, wx.EXPAND)
         outer.Add(left_box, 0, wx.EXPAND)
         outer.Add(self.stack, 1, wx.EXPAND | wx.ALL, 8)
@@ -3450,7 +3480,7 @@ class SettingsDialog(wx.Dialog):
         self.Bind(wx.EVT_CHAR_HOOK, self.on_char_hook)
 
         # Startowa kategoria + fokus
-        start_category = 0 if start_category not in (0, 1, 2, 3, 4, 5) else start_category
+        start_category = 0 if start_category not in (0, 1, 2, 3, 4, 5, 6) else start_category
         self.categories.SetSelection(start_category)
         self._show_panel(start_category)
         if start_category == 0:
@@ -3463,6 +3493,8 @@ class SettingsDialog(wx.Dialog):
             wx.CallAfter(self.api_panel.focus_first)
         elif start_category == 4:
             wx.CallAfter(self.camera_panel.focus_first)
+        elif start_category == 5:
+            wx.CallAfter(self.compare_panel.focus_first)
         else:
             wx.CallAfter(self.advanced_panel.focus_first)
 
@@ -3478,7 +3510,8 @@ class SettingsDialog(wx.Dialog):
         self.working_panel.Show(idx == 2)
         self.api_panel.Show(idx == 3)
         self.camera_panel.Show(idx == 4)
-        self.advanced_panel.Show(idx == 5)
+        self.compare_panel.Show(idx == 5)
+        self.advanced_panel.Show(idx == 6)
         self.stack.Layout()
 
     def on_category_change(self, event):
@@ -3500,6 +3533,8 @@ class SettingsDialog(wx.Dialog):
             elif sel == 4:
                 self.camera_panel.focus_first()
             elif sel == 5:
+                self.compare_panel.focus_first()
+            elif sel == 6:
                 self.advanced_panel.focus_first()
             return  # zjedz event
         event.Skip()
@@ -3514,6 +3549,8 @@ class SettingsDialog(wx.Dialog):
         if not self.api_panel.save_to_config():
             return
         if not self.camera_panel.save_to_config():
+            return
+        if not self.compare_panel.save_to_config():
             return
         if not self.advanced_panel.save_to_config():
             return
