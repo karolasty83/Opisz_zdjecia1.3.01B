@@ -966,7 +966,10 @@ class CompareDialog(wx.Dialog):
             self.question_input.SetValue("")
             changed, target, cleaned, messages = _strip_stars(self._history)
             if not changed:
-                wx.MessageBox("Nie znaleziono znaku *.", "Informacja", wx.OK | wx.ICON_INFORMATION, parent=self)
+                try:
+                    _nvda_speech.speak("Nie znaleziono znaku gwiazdka.")
+                except Exception:
+                    pass
                 return
             if target == "message":
                 self._history = messages
@@ -1168,7 +1171,7 @@ class SearchDialog(wx.Dialog):
         self.query = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)
         vbox.Add(self.query, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
 
-        self.list = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL)
+        self.list = wx.ListCtrl(panel, style=wx.LC_REPORT)
         self.list.InsertColumn(0, "Plik", width=520)
         self.list.InsertColumn(1, "Status", width=140)
         vbox.Add(self.list, 1, wx.EXPAND | wx.ALL, 8)
@@ -1176,8 +1179,11 @@ class SearchDialog(wx.Dialog):
 
         btns = wx.StdDialogButtonSizer()
         self._search_btn = wx.Button(panel, label="OK")
+        self._compare_btn = wx.Button(panel, label="Porównaj…")
+        self._compare_btn.Enable(False)
         close_btn = wx.Button(panel, wx.ID_CANCEL, "Zamknij")
         btns.AddButton(self._search_btn)
+        btns.AddButton(self._compare_btn)
         btns.AddButton(close_btn)
         btns.Realize()
         vbox.Add(btns, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
@@ -1188,7 +1194,11 @@ class SearchDialog(wx.Dialog):
         self.query.Bind(wx.EVT_TEXT_ENTER, self.on_submit_query)
         self._search_btn.Bind(wx.EVT_BUTTON, self.on_submit_query)
         self.list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_activate_item)
+        self.list.Bind(wx.EVT_LIST_ITEM_SELECTED, lambda e: (self._update_compare_button(), e.Skip()))
+        self.list.Bind(wx.EVT_LIST_ITEM_DESELECTED, lambda e: (self._update_compare_button(), e.Skip()))
+        self.list.Bind(wx.EVT_CONTEXT_MENU, self.on_context_menu)
         self.Bind(wx.EVT_CHAR_HOOK, self.on_char_hook)
+        self._compare_btn.Bind(wx.EVT_BUTTON, lambda e: self._run_compare(self._selected_paths()))
 
         self.query.SetFocus()
 
@@ -1211,6 +1221,7 @@ class SearchDialog(wx.Dialog):
             self.list.Focus(0)
             self.list.SetFocus()
             self._hide_input_controls()
+        self._update_compare_button()
 
     def _ensure_list_shown(self):
         if self.list.IsShown():
@@ -1234,25 +1245,18 @@ class SearchDialog(wx.Dialog):
         self.Layout()
 
     def on_activate_item(self, _evt):
-        idx = self.list.GetFirstSelected()
-        if idx == -1:
-            idx = 0
-        if idx == -1 or idx >= self.list.GetItemCount():
+        paths = self._selected_paths()
+        if len(paths) >= 2:
+            self._run_compare(paths); return
+        if len(paths) == 0:
             return
-        name = self.list.GetItemText(idx)
-        # Open read-only description dialog and return to search
-        path = None
-        for p in (getattr(self.parent_view, "visible_files", []) or []):
-            if os.path.basename(p) == name:
-                path = p
-                break
-        if path:
-            desc = getattr(self.parent_view, "results", {}).get(path)
-            if not (desc and str(desc).strip()):
-                try:
-                    desc = read_description(path)
-                except Exception:
-                    desc = ""
+        path = paths[0]
+        desc = getattr(self.parent_view, "results", {}).get(path)
+        if not (desc and str(desc).strip()):
+            try:
+                desc = read_description(path)
+            except Exception:
+                desc = ""
         followup_kwargs = {}
         if path and getattr(self, "parent_view", None) is not None:
             followup_kwargs = {"viewer": self.parent_view, "image_path": path}
@@ -1260,6 +1264,48 @@ class SearchDialog(wx.Dialog):
         dlg.ShowModal()
         dlg.Destroy()
         return
+
+    def on_context_menu(self, event):
+        paths = self._selected_paths()
+        cmp_item_id = wx.NewId()
+        menu = wx.Menu()
+        item = menu.Append(cmp_item_id, "Porównaj zaznaczone")
+        if len(paths) < 2:
+            item.Enable(False)
+        self.Bind(wx.EVT_MENU, lambda e: self._run_compare(paths), id=cmp_item_id)
+        self.PopupMenu(menu)
+        menu.Destroy()
+        event.Skip(False)
+
+    def _selected_paths(self):
+        names = []
+        i = -1
+        while True:
+            i = self.list.GetNextItem(i, wx.LIST_NEXT_ALL, wx.LIST_STATE_SELECTED)
+            if i == -1:
+                break
+            names.append(self.list.GetItemText(i))
+        files = (getattr(self.parent_view, "visible_files", []) or [])
+        paths = []
+        for name in names:
+            for p in files:
+                if os.path.basename(p) == name:
+                    paths.append(p); break
+        return paths
+
+    def _run_compare(self, paths):
+        if not paths or len(paths) < 2:
+            return
+        viewer = getattr(self, "parent_view", None)
+        if viewer and hasattr(viewer, "_compare_paths"):
+            viewer._compare_paths(paths)
+        else:
+            wx.MessageBox(
+                "Porównywanie nie jest dostępne w tym widoku.",
+                "Porównanie niedostępne",
+                wx.OK | wx.ICON_INFORMATION,
+                parent=self,
+            )
 
     def _populate_results(self, term: str):
         self.list.DeleteAllItems()
@@ -1279,6 +1325,15 @@ class SearchDialog(wx.Dialog):
                 i = self.list.InsertItem(self.list.GetItemCount(), os.path.basename(path))
                 status = "z opisem" if (desc and str(desc).strip()) else "brak opisu"
                 self.list.SetItem(i, 1, status)
+        self._update_compare_button()
+
+    def _update_compare_button(self):
+        if not getattr(self, "_compare_btn", None):
+            return
+        selected = len(self._selected_paths())
+        label = f"Porównaj {selected}" if selected > 0 else "Porównaj…"
+        self._compare_btn.SetLabel(label)
+        self._compare_btn.Enable(selected >= 2)
 
 # -----------------------------------
 # PRZEGLĄDARKA: lista + Wstecz + MENU KONTEKSTOWE + F11
@@ -1921,25 +1976,7 @@ class ViewerFrame(wx.Frame):
             return None
         return self.visible_files[row]
 
-    def _compare_selected(self):
-        try:
-            rows = self._get_selected_rows()
-        except Exception:
-            rows = []
-        if len(rows) < 2:
-            wx.MessageBox(
-                "Zaznacz co najmniej 2 pliki, aby porównać.",
-                "Porównanie niedostępne",
-                wx.OK | wx.ICON_INFORMATION,
-                parent=self,
-            )
-            return
-        rows = [r for r in rows if 0 <= r < len(self.visible_files)]
-        if len(rows) < 2:
-            return
-        paths = [self.visible_files[r] for r in rows]
-        if not paths or len(paths) < 2:
-            return
+    def _compare_paths(self, paths: list[str]):
         if not self.api_key:
             try:
                 self.api_key = load_api_key()
@@ -1962,6 +1999,27 @@ class ViewerFrame(wx.Frame):
         dlg.Destroy()
         if res == wx.ID_OK:
             self.list.SetFocus()
+
+    def _compare_selected(self):
+        try:
+            rows = self._get_selected_rows()
+        except Exception:
+            rows = []
+        if len(rows) < 2:
+            wx.MessageBox(
+                "Zaznacz co najmniej 2 pliki, aby porównać.",
+                "Porównanie niedostępne",
+                wx.OK | wx.ICON_INFORMATION,
+                parent=self,
+            )
+            return
+        rows = [r for r in rows if 0 <= r < len(self.visible_files)]
+        if len(rows) < 2:
+            return
+        paths = [self.visible_files[r] for r in rows]
+        if not paths or len(paths) < 2:
+            return
+        self._compare_paths(paths)
 
     def _open_current_external(self):
         # Blokada przy wielokrotnym zaznaczeniu (także dla menu kontekstowego)
