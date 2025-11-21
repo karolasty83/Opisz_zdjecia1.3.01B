@@ -1210,17 +1210,30 @@ class SearchDialog(wx.Dialog):
 
     def _run_search(self):
         term = (self.query.GetValue() or "").strip().lower()
-        self._populate_results(term)
+        return self._populate_results(term)
 
     def on_submit_query(self, _evt=None):
-        self._ensure_list_shown()
-        self._run_search()
-        # Po wykonaniu wyszukiwania, jeśli są wyniki, przenieś fokus na listę i zaznacz pierwszy
-        if self.list.GetItemCount() > 0:
+        count = self._run_search()
+        if count > 0:
+            self._ensure_list_shown()
             self.list.Select(0)
             self.list.Focus(0)
             self.list.SetFocus()
             self._hide_input_controls()
+        else:
+            try:
+                self.list.Hide()
+                if self._panel:
+                    self._panel.Layout()
+                self.Layout()
+            except Exception:
+                pass
+            _nvda_speech.speak("Nie znaleziono")
+            try:
+                self.query.SetValue("")
+                self.query.SetFocus()
+            except Exception:
+                pass
         self._update_compare_button()
 
     def _ensure_list_shown(self):
@@ -1310,8 +1323,9 @@ class SearchDialog(wx.Dialog):
     def _populate_results(self, term: str):
         self.list.DeleteAllItems()
         if not term:
-            return
+            return 0
         files = (getattr(self.parent_view, "visible_files", []) or [])
+        count = 0
         for path in files:
             # Pobierz opis z cache albo z pliku
             desc = getattr(self.parent_view, "results", {}).get(path)
@@ -1325,7 +1339,9 @@ class SearchDialog(wx.Dialog):
                 i = self.list.InsertItem(self.list.GetItemCount(), os.path.basename(path))
                 status = "z opisem" if (desc and str(desc).strip()) else "brak opisu"
                 self.list.SetItem(i, 1, status)
+                count += 1
         self._update_compare_button()
+        return count
 
     def _update_compare_button(self):
         if not getattr(self, "_compare_btn", None):
@@ -1495,6 +1511,17 @@ class ViewerFrame(wx.Frame):
                     self.visible_files.append(p)
         else:
             self.visible_files = list(self.all_files)
+
+    def _sort_files(self):
+        key = lambda p: os.path.basename(p).lower()
+        try:
+            self.all_files.sort(key=key)
+        except Exception:
+            self.all_files = sorted(self.all_files, key=key)
+        try:
+            self.visible_files.sort(key=key)
+        except Exception:
+            self.visible_files = sorted(self.visible_files, key=key)
 
     def _update_compare_button(self):
         count = 0
@@ -2123,6 +2150,7 @@ class ViewerFrame(wx.Frame):
                 if item == path:
                     container[idx] = new_path
 
+        self._sort_files()
         self._pending_focus_path = new_path
         self.populate_list()
         self.list.SetFocus()
