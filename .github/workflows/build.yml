@@ -70,9 +70,3 @@ jobs:
           asset_path: dist/${{ env.EXE_NAME }}.exe
           asset_name: ${{ env.EXE_NAME }}.exe
           asset_content_type: application/octet-stream
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.EXE_NAME }}-exe
-          path: dist/${{ env.EXE_NAME }}.exe
