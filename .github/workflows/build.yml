@@ -7,10 +7,6 @@ on:
         description: "Nazwa pliku EXE (bez rozszerzenia)"
         required: false
         default: "OpiszZdjecia"
-  push:
-    branches: [ main ]
-    tags:
-      - "*"
 
 permissions:
   contents: write
